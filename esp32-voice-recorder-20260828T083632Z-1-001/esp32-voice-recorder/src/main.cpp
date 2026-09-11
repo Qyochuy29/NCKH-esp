@@ -7,6 +7,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include "driver/i2s.h"
 
 // AI Includes
@@ -16,9 +17,9 @@
 #include "4NHAN91.h"
 
 // ---------- CẤU HÌNH CHÂN I2S ----------
-#define I2S_WS   4
-#define I2S_SD   5
-#define I2S_SCK  6
+#define I2S_WS   5
+#define I2S_SD   6
+#define I2S_SCK  4
 #define I2S_PORT I2S_NUM_0
 
 // ---------- CẤU HÌNH GHI ÂM ----------
@@ -28,8 +29,8 @@
 #define BUFFER_BYTES     (SAMPLES_TOTAL * sizeof(int16_t)) 
 #define I2S_READ_SAMPLES 1024
 
-// ---------- CẤU HÌNH SERVER ----------
-const char* serverBase    = "http://192.168.1.8:3000";
+// ---------- CẤU HÌNH SERVER (Mạng LAN trực tiếp, không qua Cloudflare) ----------
+const char* serverBase    = "http://192.168.1.110:3000";
 const char* deviceToken   = "your_secure_device_token_123";
 const char* deviceId      = "Cam-HL1";
 
@@ -96,16 +97,16 @@ static constexpr int IMPACT_NUM_BLOCKS = N_SAMPLES / IMPACT_BLOCK_SAMPLES;
 // Nguong bao thu, de tranh KHOC that bi ep thanh DAP_PHA.
 // Co the tune sau neu can.
 // FIX: khong bat buoc mic phai clipping moi duoc coi la va dap.
-// Dung 2 gate: mot cu dap rat manh, hoac nhieu transient ngan lien tiep.
-static constexpr float IMPACT_SINGLE_MIN_PEAK_NORM = 0.70f;
-static constexpr float IMPACT_SINGLE_MIN_CREST = 12.0f;
-static constexpr float IMPACT_SINGLE_MAX_ACTIVE_MS = 320.0f;
-static constexpr float IMPACT_SINGLE_MAX_LONGEST_MS = 90.0f;
+// Nguong phat hien va dap co hoc thuc te (tranh trong nhac, nhip hat gay bao dong gia):
+static constexpr float IMPACT_SINGLE_MIN_PEAK_NORM = 0.35f; // Peak >= ~11400
+static constexpr float IMPACT_SINGLE_MIN_CREST = 3.8f;       // Xung va dap dot bien
+static constexpr float IMPACT_SINGLE_MAX_ACTIVE_MS = 400.0f;
+static constexpr float IMPACT_SINGLE_MAX_LONGEST_MS = 250.0f;
 
-static constexpr float IMPACT_MULTI_MIN_PEAK_NORM = 0.55f;
-static constexpr float IMPACT_MULTI_MIN_CREST = 9.0f;
-static constexpr float IMPACT_MULTI_MAX_ACTIVE_MS = 550.0f;
-static constexpr float IMPACT_MULTI_MAX_LONGEST_MS = 140.0f;
+static constexpr float IMPACT_MULTI_MIN_PEAK_NORM = 0.25f;  // Peak >= ~8100
+static constexpr float IMPACT_MULTI_MIN_CREST = 3.5f;
+static constexpr float IMPACT_MULTI_MAX_ACTIVE_MS = 500.0f;
+static constexpr float IMPACT_MULTI_MAX_LONGEST_MS = 180.0f;
 
 
 // ============================================================
@@ -247,16 +248,28 @@ bool uploadToWebsite(uint8_t* wavData, size_t wavSize, const char* detectedClass
 
   Serial.printf("[UPLOAD] POST %s (%d bytes)\n", url.c_str(), wavSize);
 
-  WiFiClient client;
   HTTPClient http;
-  if (!http.begin(client, url)) return false;
-  
-  http.addHeader("Content-Type", "audio/wav");
-  http.addHeader("X-Device-Token", deviceToken);
-  http.setConnectTimeout(5000);
-  http.setTimeout(65000);
+  int code = 0;
 
-  int code = http.sendRequest("POST", wavData, wavSize);
+  if (url.startsWith("https://")) {
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+    if (!http.begin(secureClient, url)) return false;
+    http.addHeader("Content-Type", "audio/wav");
+    http.addHeader("X-Device-Token", deviceToken);
+    http.setConnectTimeout(10000);
+    http.setTimeout(65000);
+    code = http.sendRequest("POST", wavData, wavSize);
+  } else {
+    WiFiClient client;
+    if (!http.begin(client, url)) return false;
+    http.addHeader("Content-Type", "audio/wav");
+    http.addHeader("X-Device-Token", deviceToken);
+    http.setConnectTimeout(5000);
+    http.setTimeout(65000);
+    code = http.sendRequest("POST", wavData, wavSize);
+  }
+
   if (code > 0) {
     Serial.printf("[UPLOAD] HTTP %d: %s\n", code, http.getString().c_str());
   } else {
@@ -397,18 +410,19 @@ static bool analyzeImpact(float rmsDbfs, int16_t peakSample)
     // KHONG bat buoc clipping. INMP441 co the thu mot cu dap rat manh
     // nhung peak van duoi 32700, nhu mau thuc te peakNorm=0.740.
     //
-    // Gate A: 1 cu dap manh, xung rat nhon va ngan.
+    // Gate A: 1 cu dap manh, xung rat nhon va ngan (khong phai nhip trong nhac lien tuc).
     const bool singleStrongImpact =
         transientCount >= 1 &&
+        transientCount <= 4 &&
         peakNorm >= IMPACT_SINGLE_MIN_PEAK_NORM &&
         crest >= IMPACT_SINGLE_MIN_CREST &&
         activeMs <= IMPACT_SINGLE_MAX_ACTIVE_MS &&
         longestMs <= IMPACT_SINGLE_MAX_LONGEST_MS;
 
-    // Gate B: co tu 2 transient tro len; cho phep peak thap hon mot chut
-    // nhung van yeu cau crest cao va cac xung ngan de tranh tieng noi.
+    // Gate B: co tu 2 den 4 transient dot bien (nhu 2-3 cu dap lien tiep).
     const bool multiTransientImpact =
         transientCount >= 2 &&
+        transientCount <= 4 &&
         peakNorm >= IMPACT_MULTI_MIN_PEAK_NORM &&
         crest >= IMPACT_MULTI_MIN_CREST &&
         activeMs <= IMPACT_MULTI_MAX_ACTIVE_MS &&
@@ -731,9 +745,9 @@ void setup() {
   if (held) { Serial.println("Xóa WiFi!"); wm.resetSettings(); }
 
   // Ket noi uu tien truc tiep toi WiFi "Bui Tien Tuan"
-  Serial.println("Dang ket noi WiFi: Bui Tien Tuan");
+  Serial.println("Dang ket noi WiFi: VP_127");
   WiFi.mode(WIFI_STA);
-  WiFi.begin("Bui Tien Tuan", "24082010");
+  WiFi.begin("VP_127", "Utehy@123");
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 25) {
     delay(500);
@@ -804,9 +818,15 @@ void loop() {
   
   int16_t overallPeak = 0;
   float overallRmsDbfs = recordAudio(overallPeak);
-  
-  if (overallRmsDbfs < -42.0f) {
-    Serial.printf("[REC] Loc on: phong yen tinh / tieng on nen (%.1f dBFS < -42.0 dBFS), bo qua.\n", overallRmsDbfs);
+  Serial.printf("[REC] Thu xong: Peak=%d | RMS=%.1f dBFS\n", overallPeak, overallRmsDbfs);
+
+  if (overallPeak < 5) {
+    Serial.println("[CANH BAO MIC] Tin hieu mic gan 0! Kiem tra day noi INMP441 (SCK:6, SD:5, WS:4, L/R:GND).");
+  }
+
+  // Lọc khoảng im lặng / phòng yên tĩnh (chỉnh nhẹ lên Peak < 220 hoặc RMS < -48 dBFS):
+  if (overallRmsDbfs < -48.0f || overallPeak < 220) {
+    Serial.printf("[REC] Loc im lang: phong yen tinh (Peak=%d < 220, RMS=%.1f dBFS < -48dBFS) -> Bo qua an toan.\n", overallPeak, overallRmsDbfs);
     delay(20);
     return;
   }
@@ -846,14 +866,15 @@ void loop() {
       // 1. Phan tich xung va dap NGAY SAU KHI THU (Chuan tu codetrainplatf)
       analyzeImpact(chunkRmsDbfs, chunkPeak16);
 
-      if (g_audioLikelyImpact) {
+      // Chi override DAP_PHA neu thuc su co cu dap manh (Peak >= 12000 hoac clipping)
+      if (g_audioLikelyImpact && (chunkPeak16 >= 12000 || chunkClipped)) {
           Serial.println("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-          Serial.println("=> PHAT HIEN XUNG VA DAP / GO BAN / DAP PHA");
+          Serial.println("=> PHAT HIEN XUNG VA DAP MANH / GO BAN / DAP PHA");
           Serial.println("=> KET QUA CUOI: DAP_PHA (Override truoc CNN)");
           Serial.println("=> KHONG DUA XUNG NAY VAO MODEL KHOC");
           Serial.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
           shouldUpload = true;
-          uploadClass = "DAP_PHA";
+          uploadClass = "dap_pha";
           maxConfidence = 1.0f;
           break;
       }
@@ -906,37 +927,47 @@ void loop() {
           }
       }
 
-      // LOC ON: Neu nhan cao nhat la TIENG_ON hoac TIENG_ON >= 50% -> Bo qua ngay lap tuc!
-      if (maxClass == AUDIO_CLASS_TIENG_ON || prob[AUDIO_CLASS_TIENG_ON] >= 0.50f) {
-          Serial.printf("=> KET QUA: LA TIENG ON (TIENG_ON: %.2f%%). Bo qua, khong canh bao.\n", prob[AUDIO_CLASS_TIENG_ON] * 100.0f);
+      // LOC ON CHI KHI TIENG ON RAT CAO (>= 80%) VA KHONG CO VA DAP:
+      if (prob[AUDIO_CLASS_TIENG_ON] >= 0.80f && !g_audioLikelyImpact) {
+          Serial.printf("=> KET QUA: TIENG ON NEN CHIEM %.2f%%. Bo qua.\n", prob[AUDIO_CLASS_TIENG_ON] * 100.0f);
           continue;
       }
 
-      // 6. Ap dung nguong quyet dinh (chi kich hoat khi nhan do chiem uu the cao hon tieng on):
-      if (prob[AUDIO_CLASS_DAP_PHA] >= AUDIO_THRESHOLD_DAP_PHA && g_audioLikelyImpact) {
-          Serial.printf("=> NHAN: DAP_PHA (%.2f%%) + IMPACT DETECTED\n", prob[AUDIO_CLASS_DAP_PHA] * 100.0f);
-          shouldUpload = true;
-          uploadClass = "DAP_PHA";
-          maxConfidence = prob[AUDIO_CLASS_DAP_PHA];
-          break;
-      }
-      else if (maxClass == AUDIO_CLASS_KHOC && prob[AUDIO_CLASS_KHOC] >= AUDIO_THRESHOLD_KHOC) {
+      // 6. Ap dung nguong quyet dinh Hybrid AI:
+      // Uu tien 1: KHOC / KEU CUU
+      if (prob[AUDIO_CLASS_KHOC] >= 0.40f) {
           Serial.printf("=> NHAN: KHOC (%.2f%%)\n", prob[AUDIO_CLASS_KHOC] * 100.0f);
           shouldUpload = true;
-          uploadClass = "KHOC";
-          maxConfidence = prob[AUDIO_CLASS_KHOC];
+          uploadClass = "help";
+          maxConfidence = max(prob[AUDIO_CLASS_KHOC], 0.80f);
           break;
       }
-      else if (maxClass == AUDIO_CLASS_CHUI_NHAU && prob[AUDIO_CLASS_CHUI_NHAU] >= AUDIO_THRESHOLD_CHUI_NHAU) {
-          Serial.printf("=> NHAN: CHUI_NHAU (%.2f%%)\n", prob[AUDIO_CLASS_CHUI_NHAU] * 100.0f);
+      // Uu tien 2: DAP PHA
+      else if (g_audioLikelyImpact || prob[AUDIO_CLASS_DAP_PHA] >= 0.45f) {
+          Serial.printf("=> NHAN: DAP_PHA (%.2f%%) [Impact: %s]\n", prob[AUDIO_CLASS_DAP_PHA] * 100.0f, g_audioLikelyImpact ? "YES" : "NO");
           shouldUpload = true;
-          uploadClass = "CHUI_NHAU";
+          uploadClass = "dap_pha";
+          maxConfidence = max(prob[AUDIO_CLASS_DAP_PHA], 0.85f);
+          break;
+      }
+      // Uu tien 3: CAI NHAU / CHUI NHAU
+      else if (prob[AUDIO_CLASS_CHUI_NHAU] >= 0.40f) {
+          Serial.printf("=> NHAN: CO TIENG CAI NHAU (%.2f%%) -> Gui len Web AI de tham dinh!\n", prob[AUDIO_CLASS_CHUI_NHAU] * 100.0f);
+          shouldUpload = true;
+          uploadClass = "threat";
           maxConfidence = prob[AUDIO_CLASS_CHUI_NHAU];
           break;
       }
+      // Uu tien 4: GIONG NOI TO / TRANH CAI (Chi thu am neu am luong rat lon Peak >= 1500 va khong phai on)
+      else if (prob[AUDIO_CLASS_TIENG_ON] < 0.70f && overallPeak >= 1500) {
+          Serial.printf("=> PHAT HIEN GIONG NOI TO (Tieng on: %.2f%%, Peak=%d) -> Gui len Web!\n", prob[AUDIO_CLASS_TIENG_ON] * 100.0f, overallPeak);
+          shouldUpload = true;
+          uploadClass = "analyze";
+          maxConfidence = 0.50f;
+          break;
+      }
       else {
-          Serial.println("=> KET QUA: NOI CHUYEN BINH THUONG HOAC TIENG ON KHONG NGUY HIEM");
-          Serial.println("=> KHONG CANH BAO, BO QUA.");
+          Serial.printf("=> NOI CHUYEN BINH THUONG / TIENG ON (Tieng on: %.2f%%, Peak=%d) -> Bo qua an toan.\n", prob[AUDIO_CLASS_TIENG_ON] * 100.0f, overallPeak);
       }
   }
 

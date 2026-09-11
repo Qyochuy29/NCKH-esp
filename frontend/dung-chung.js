@@ -197,6 +197,7 @@ function showToast(title, message, severity = 'info') {
 
 function showAlertToast(alert) {
   const typeLabels = {
+    dap_pha: '<i class="bi bi-hammer" style="color:var(--danger)"></i> Đập phá / Đánh đập',
     scream: '<i class="bi bi-volume-up" style="color:var(--danger)"></i> Gào thét / La hét',
     help: '<i class="bi bi-person-arms-up" style="color:var(--warning)"></i> Kêu cứu / Van xin',
     threat: '<i class="bi bi-shield-exclamation" style="color:var(--caution)"></i> Đe dọa',
@@ -436,6 +437,7 @@ function escapeHTML(str) {
 
 /* ========== LABEL HELPERS ========== */
 const SOUND_TYPE_LABELS = {
+  dap_pha: { label: 'Đập phá / Đánh đập', icon: '<i class="bi bi-hammer" style="color:var(--danger)"></i>', color: 'danger' },
   scream: { label: 'Gào thét / La hét', icon: '<i class="bi bi-volume-up" style="color:var(--danger)"></i>', color: 'danger' },
   help: { label: 'Kêu cứu / Van xin', icon: '<i class="bi bi-person-arms-up" style="color:var(--warning)"></i>', color: 'warning' },
   threat: { label: 'Đe dọa', icon: '<i class="bi bi-shield-exclamation" style="color:var(--caution)"></i>', color: 'caution' },

@@ -52,7 +52,7 @@ new_target = f"""/*
 #define I2S_READ_SAMPLES 1024
 
 // ---------- CẤU HÌNH SERVER ----------
-const char* serverBase    = "http://192.168.1.88:3000";
+const char* serverBase    = "http://192.168.1.9:3000";
 const char* deviceToken   = "your_secure_device_token_123";
 const char* deviceId      = "Cam-HL1";
 

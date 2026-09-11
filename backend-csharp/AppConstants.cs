@@ -50,6 +50,7 @@ namespace SchoolGuardian.Api
         // ====================================================
         public static class SoundLabels
         {
+            public const string DapPha   = "Đập phá / Đánh đập";
             public const string Help     = "Kêu cứu / Van xin";
             public const string Threat   = "Đe dọa";
             public const string Scream   = "Gào thét / La hét";

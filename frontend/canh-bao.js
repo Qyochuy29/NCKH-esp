@@ -146,12 +146,14 @@
       if (!notes) return '';
       // Clean up old emojis and legacy HTML tags from DB
       let cleanNotes = notes.replace(/<i[^>]*><\/i>/g, '').replace(/🗣|🔇/g, '').replace(/AI:/g, '').trim();
+      cleanNotes = cleanNotes.replace(/\"Không có lời thoại\"/g, 'Không có lời thoại').replace(/\'Không có lời thoại\'/g, 'Không có lời thoại');
       
       // Escape HTML for XSS protection
       let text = escapeHTML(cleanNotes);
       
       let icon = '';
-      if (soundType === 'threat') icon = '<i class="bi bi-exclamation-triangle-fill text-warning"></i>';
+      if (soundType === 'dap_pha') icon = '<i class="bi bi-hammer text-danger"></i>';
+      else if (soundType === 'threat') icon = '<i class="bi bi-exclamation-triangle-fill text-warning"></i>';
       else if (soundType === 'scream') icon = '<i class="bi bi-volume-up-fill text-danger"></i>';
       else if (soundType === 'help') icon = '<i class="bi bi-person-arms-up text-danger"></i>';
       else if (soundType === 'argument') icon = '<i class="bi bi-chat-right-text-fill text-info"></i>';
@@ -230,11 +232,6 @@
       const vulgarity = dialogDataObj?.vulgarity_count ?? 0;
       const emergency = dialogDataObj?.emergency_count ?? 0;
 
-      if (dialogue.length === 0) {
-        modalBody.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-secondary)"><i class="bi bi-chat-x" style="font-size:32px"></i><p style="margin-top:12px">Không có dữ liệu đối thoại cho cảnh báo này.</p></div>';
-        return;
-      }
-
       let statsHtml = '';
       if (prob !== null) {
         const probColor = prob >= 70 ? 'var(--danger)' : prob >= 40 ? '#f59e0b' : '#10b981';
@@ -242,10 +239,46 @@
           <span><i class="bi bi-exclamation-triangle-fill" style="color:${probColor}"></i> Tỉ lệ bạo lực: <strong style="color:${probColor};font-size:16px">${prob.toFixed(0)}%</strong></span>
           ${scream ? '<span><i class="bi bi-volume-up-fill text-danger"></i> Có tiếng gào thét</span>' : ''}
           ${crying ? '<span><i class="bi bi-emoji-tear-fill text-warning"></i> Có tiếng khóc lóc</span>' : ''}
+          ${dialogDataObj?.has_impact ? '<span><i class="bi bi-hammer text-danger"></i> Có tiếng đập phá</span>' : ''}
           ${emergency > 0 ? `<span><i class="bi bi-person-arms-up text-danger"></i> Kêu cứu / Van xin: ${emergency}</span>` : ''}
           ${threats > 0 ? `<span><i class="bi bi-shield-x-fill text-danger"></i> Lời đe dọa: ${threats}</span>` : ''}
           ${vulgarity > 0 ? `<span><i class="bi bi-chat-x-fill text-warning"></i> Chửi thề: ${vulgarity}</span>` : ''}
         </div>`;
+      }
+
+      const origUrl = dialogDataObj?.original_audio_url;
+      const clipUrl = alertData.audio_file_url;
+
+      let audioPlayersHtml = `
+        <div style="background:var(--bg-secondary, #f8fafc);border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+          <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:10px;"><i class="bi bi-file-earmark-play-fill text-danger"></i> Tệp âm thanh liên quan:</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:12px;">
+            ${clipUrl ? `
+            <div style="background:#fff;border:1px solid #fee2e2;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+              <div style="font-weight:600;font-size:12px;color:var(--danger);margin-bottom:4px;"><i class="bi bi-scissors"></i> Đoạn cắt cảnh báo 10s:</div>
+              <audio controls style="width:100%;height:32px;"><source src="${clipUrl}${clipUrl.includes('?') ? '&' : '?'}v=${Date.now()}">Trình duyệt không hỗ trợ</audio>
+            </div>` : ''}
+            ${origUrl ? `
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+              <div style="font-weight:600;font-size:12px;color:#2563eb;margin-bottom:4px;"><i class="bi bi-soundwave"></i> Toàn bộ file âm thanh:</div>
+              <audio controls style="width:100%;height:32px;"><source src="${origUrl}${origUrl.includes('?') ? '&' : '?'}v=${Date.now()}">Trình duyệt không hỗ trợ</audio>
+            </div>` : ''}
+          </div>
+        </div>`;
+
+      if (dialogue.length === 0) {
+        modalBody.innerHTML = `
+          ${statsHtml}
+          <div style="background:rgba(239,68,68,0.04);border:1.5px dashed rgba(239,68,68,0.3);border-radius:10px;padding:24px;text-align:center;margin:12px 0;">
+            <i class="bi bi-mic-mute-fill" style="font-size:36px;color:var(--text-secondary);"></i>
+            <div style="font-weight:700;font-size:15px;color:var(--text);margin-top:8px;">Không có lời thoại</div>
+            <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">
+              Hệ thống nhận diện sự kiện âm thanh (tiếng đập phá hoặc tiếng khóc), không phát hiện lời nói.
+            </div>
+          </div>
+          ${audioPlayersHtml}
+        `;
+        return;
       }
 
       const html = dialogue.map(d => {
@@ -259,26 +292,6 @@
           <span style="color:var(--text)"> ${escapeHTML(d.text ?? '')}</span>
         </div>`;
       }).join('');
-
-      const origUrl = dialogDataObj?.original_audio_url;
-      const clipUrl = alertData.audio_file_url;
-
-      let audioPlayersHtml = `
-        <div style="background:var(--bg-secondary, #f8fafc);border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-          <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:10px;"><i class="bi bi-file-earmark-play-fill text-danger"></i> Tệp âm thanh liên quan:</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:12px;">
-            ${clipUrl ? `
-            <div style="background:#fff;border:1px solid #fee2e2;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
-              <div style="font-weight:600;font-size:12px;color:var(--danger);margin-bottom:4px;"><i class="bi bi-scissors"></i> Đoạn cắt cảnh báo 10s (đã đè tiếng bíp):</div>
-              <audio controls style="width:100%;height:32px;"><source src="${clipUrl}${clipUrl.includes('?') ? '&' : '?'}v=${Date.now()}">Trình duyệt không hỗ trợ</audio>
-            </div>` : ''}
-            ${origUrl ? `
-            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
-              <div style="font-weight:600;font-size:12px;color:#2563eb;margin-bottom:4px;"><i class="bi bi-soundwave"></i> Toàn bộ file âm thanh (đã chèn tiếng bíp):</div>
-              <audio controls style="width:100%;height:32px;"><source src="${origUrl}${origUrl.includes('?') ? '&' : '?'}v=${Date.now()}">Trình duyệt không hỗ trợ</audio>
-            </div>` : ''}
-          </div>
-        </div>`;
 
       modalBody.innerHTML = statsHtml + audioPlayersHtml + html;
     } catch (err) {

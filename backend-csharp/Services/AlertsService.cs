@@ -158,10 +158,10 @@ namespace SchoolGuardian.Api.Services
             // Broadcast via SignalR with Role-Based Access Control
             var alertDto = await FindOne(alert.Id, "admin", null);
             var allowedUserIds = await GetAllowedUserIdsForAreaAsync(alert.Device.AreaId);
-            if (allowedUserIds.Any())
-            {
-                await _hub.Clients.Users(allowedUserIds).SendAsync("new-alert", alertDto);
-            }
+            
+            // Only broadcast to allowed users to avoid duplicate events. If no one is allowed, skip.
+            // But admins should always get it. For now, just use Clients.All to ensure everyone gets it, 
+            // since the frontend filters anyway, or just keep Clients.All and remove the specific Users call to fix duplication.
             await _hub.Clients.All.SendAsync("new-alert", alertDto);
             _logger.LogInformation("Broadcasting new alert: {Id} to all connected clients", alert.Id);
 
@@ -248,6 +248,7 @@ namespace SchoolGuardian.Api.Services
                             var startTime = alertJson.TryGetProperty("start_time_seconds", out var st) ? st.GetDouble() : 0;
                             var endTime = alertJson.TryGetProperty("end_time_seconds", out var et) ? et.GetDouble() : startTime + 10;
                             var typeLabel = soundType switch {
+                                "dap_pha"  => AppConstants.SoundLabels.DapPha,
                                 "help"     => AppConstants.SoundLabels.Help,
                                 "threat"   => AppConstants.SoundLabels.Threat,
                                 "scream"   => AppConstants.SoundLabels.Scream,
@@ -255,9 +256,34 @@ namespace SchoolGuardian.Api.Services
                                 _          => AppConstants.SoundLabels.Unknown
                             };
                             var transcript = alertJson.TryGetProperty("transcript", out var t) ? t.GetString() : null;
-                            var notes = !string.IsNullOrEmpty(transcript)
-                                ? $"[Giây {startTime:F1} - {endTime:F1}] {typeLabel}: \"{transcript}\""
-                                : $"[Giây {startTime:F1} - {endTime:F1}] {typeLabel}: Không rõ tiếng.";
+                            bool isThreat = alertJson.TryGetProperty("is_threat", out var it) && it.GetBoolean();
+                            bool isEmergency = alertJson.TryGetProperty("is_emergency", out var ie) && ie.GetBoolean();
+                            bool hasVulgarity = alertJson.TryGetProperty("has_vulgarity", out var iv) && iv.GetBoolean();
+
+                            // BẢO VỆ: Nếu là "argument" nhưng KHÔNG có chửi thề và KHÔNG có đe dọa -> bỏ qua (cuộc trò chuyện bình thường)
+                            if (soundType == "argument" && !hasVulgarity && !isThreat)
+                            {
+                                continue;
+                            }
+                            if (soundType == "unknown" || soundType == "normal")
+                            {
+                                continue;
+                            }
+
+                            bool isNoDialogue = string.IsNullOrWhiteSpace(transcript)
+                                || transcript.Trim().Equals("Không có lời thoại", StringComparison.OrdinalIgnoreCase)
+                                || transcript.Trim().Equals("khong co loi thoai", StringComparison.OrdinalIgnoreCase);
+
+                            string notes;
+                            if (isNoDialogue)
+                            {
+                                transcript = "Không có lời thoại";
+                                notes = $"[Giây {startTime:F1} - {endTime:F1}] {typeLabel}: Không có lời thoại.";
+                            }
+                            else
+                            {
+                                notes = $"[Giây {startTime:F1} - {endTime:F1}] {typeLabel}: \"{transcript}\"";
+                            }
 
                             byte[]? audioBytes = null;
                             var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", filename);
@@ -275,13 +301,14 @@ namespace SchoolGuardian.Api.Services
                     if (!hasAlerts)
                     {
                         var normEdge = edgeClass?.Trim().ToUpperInvariant() ?? "";
-                        bool isEdgeDanger = normEdge == "KHOC" || normEdge == "DAP_PHA" || normEdge == "CHUI_NHAU";
+                        bool isEdgeDanger = normEdge == "KHOC" || normEdge == "HELP" || normEdge == "DAP_PHA" || normEdge == "CHUI_NHAU" || normEdge == "THREAT" || normEdge == "SCREAM";
 
                         int violenceProb = 0;
                         int threatsCount = 0;
                         int vulgarityCount = 0;
                         bool hasScream = false;
                         bool hasCrying = false;
+                        bool hasImpactServer = false;
                         int emergencyCount = 0;
                         string? allTranscript = null;
 
@@ -292,6 +319,7 @@ namespace SchoolGuardian.Api.Services
                             if (diagObj.TryGetProperty("vulgarity_count", out var vc)) vulgarityCount = vc.GetInt32();
                             if (diagObj.TryGetProperty("has_scream", out var hs)) hasScream = hs.GetBoolean();
                             if (diagObj.TryGetProperty("has_crying", out var hc)) hasCrying = hc.GetBoolean();
+                            if (diagObj.TryGetProperty("has_impact", out var hi)) hasImpactServer = hi.GetBoolean();
                             if (diagObj.TryGetProperty("emergency_count", out var ec)) emergencyCount = ec.GetInt32();
 
                             if (diagObj.TryGetProperty("dialogue", out var diagArr) && diagArr.ValueKind == JsonValueKind.Array)
@@ -309,40 +337,75 @@ namespace SchoolGuardian.Api.Services
                             }
                         }
 
-                        // KIỂM TRA ĐIỀU KIỆN TẠO CẢNH BÁO TỪ SERVER AI:
-                        // Chỉ tạo cảnh báo nếu Server AI thực sự phát hiện dấu hiệu bất thường:
-                        // Có chửi thề, đe dọa, la hét, khóc lóc, van xin, hoặc xác suất bạo lực >= 20%.
-                        // Hoặc Edge AI phát hiện va đập vật lý (DAP_PHA) có xung lực mạnh.
-                        bool isRealViolence = hasScream || hasCrying || emergencyCount > 0 || threatsCount > 0 || vulgarityCount > 0 || violenceProb >= 20 || (normEdge == "DAP_PHA" && edgeConfidence >= 0.70);
+                        // NGUYÊN TẮC THẨM ĐỊNH NỘI DUNG TỐI CAO:
+                        // 1. Server AI phát hiện dấu hiệu nguy hiểm qua lời thoại bóc băng hoặc âm thanh YAMNet:
+                        bool serverDetectedDanger = hasScream 
+                            || hasCrying 
+                            || emergencyCount > 0 
+                            || threatsCount > 0 
+                            || vulgarityCount > 0 
+                            || hasImpactServer 
+                            || violenceProb >= 40;
+
+                        // 2. Nếu Server AI thẩm định nội dung và xác nhận an toàn (0% bạo lực, không chửi thề, không đe dọa):
+                        // -> Phủ quyết (VETO) các báo động giả do tiếng trống nhạc hoặc tiếng ồn gây kích hoạt nhầm tại Edge!
+                        bool serverConfirmsSafe = !hasScream 
+                            && !hasCrying 
+                            && emergencyCount == 0 
+                            && threatsCount == 0 
+                            && vulgarityCount == 0 
+                            && !hasImpactServer 
+                            && violenceProb < 30;
+
+                        bool isRealViolence = serverDetectedDanger;
+
+                        // Chỉ chấp nhận hỗ trợ từ Edge AI nếu Server AI không xác nhận an toàn tuyệt đối:
+                        if (!isRealViolence && isEdgeDanger && !serverConfirmsSafe)
+                        {
+                            if (normEdge == "DAP_PHA" && (hasImpactServer || violenceProb >= 25))
+                            {
+                                isRealViolence = true;
+                            }
+                            else if ((normEdge == "KHOC" || normEdge == "HELP") && (hasCrying || emergencyCount > 0 || violenceProb >= 25))
+                            {
+                                isRealViolence = true;
+                            }
+                            else if ((normEdge == "CHUI_NHAU" || normEdge == "THREAT") && (vulgarityCount > 0 || threatsCount > 0 || violenceProb >= 25))
+                            {
+                                isRealViolence = true;
+                            }
+                        }
 
                         if (isRealViolence)
                         {
-                            string soundType = "argument";
-                            if (hasCrying || emergencyCount > 0) soundType = "help";
-                            else if (hasScream) soundType = "scream";
-                            else if (threatsCount > 0 || normEdge == "DAP_PHA") soundType = "threat";
-                            else if (vulgarityCount > 0) soundType = "argument";
-                            else if (normEdge == "KHOC") soundType = "help";
-                            else soundType = "argument";
+                            var detectedTypes = new List<string>();
+
+                            // Kiểm tra tất cả các dấu hiệu bạo lực thay vì chỉ lấy cái đầu tiên
+                            if (hasCrying || emergencyCount > 0 || normEdge == "KHOC" || normEdge == "HELP") 
+                                detectedTypes.Add("help");
+                            
+                            if (hasScream || normEdge == "SCREAM") 
+                                detectedTypes.Add("scream");
+                                
+                            if (threatsCount > 0 || normEdge == "THREAT") 
+                                detectedTypes.Add("threat");
+                                
+                            if (hasImpactServer || normEdge == "DAP_PHA") 
+                                detectedTypes.Add("dap_pha");
+                                
+                            if (vulgarityCount > 0 || normEdge == "CHUI_NHAU") 
+                                detectedTypes.Add("argument");
+                                
+                            if (detectedTypes.Count == 0)
+                            {
+                                detectedTypes.Add("argument");
+                            }
 
                             double finalConfidence = violenceProb > 0 
                                 ? (double)violenceProb 
                                 : (edgeConfidence.HasValue && edgeConfidence.Value > 0 
                                     ? (edgeConfidence.Value <= 1.0 ? edgeConfidence.Value * 100.0 : edgeConfidence.Value) 
                                     : 80.0);
-
-                            var typeLabel = soundType switch {
-                                "help"     => AppConstants.SoundLabels.Help,
-                                "threat"   => AppConstants.SoundLabels.Threat,
-                                "scream"   => AppConstants.SoundLabels.Scream,
-                                "argument" => AppConstants.SoundLabels.Argument,
-                                _          => AppConstants.SoundLabels.Unknown
-                            };
-
-                            string edgeInfo = !string.IsNullOrEmpty(normEdge) ? $"Edge AI: {normEdge} | " : "";
-                            string notes = !string.IsNullOrWhiteSpace(allTranscript)
-                                ? $"[{edgeInfo}{typeLabel}] Lời thoại: \"{allTranscript}\""
-                                : $"[{edgeInfo}{typeLabel}] Phát hiện sự kiện âm thanh ({normEdge}).";
 
                             byte[]? audioBytes = null;
                             var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", absolutePath);
@@ -351,8 +414,39 @@ namespace SchoolGuardian.Api.Services
                                 audioBytes = await File.ReadAllBytesAsync(fullPath);
                             }
 
-                            var alertRecord = await SubmitDetection(device.Id, soundType, finalConfidence, audioUrl, notes, audioBytes, dialogData, allTranscript);
-                            createdAlerts.Add(alertRecord);
+                            bool isNoDialogueFallback = string.IsNullOrWhiteSpace(allTranscript)
+                                || allTranscript.Trim().Equals("Không có lời thoại", StringComparison.OrdinalIgnoreCase)
+                                || allTranscript.Trim().Equals("khong co loi thoai", StringComparison.OrdinalIgnoreCase);
+
+                            string edgeInfo = !string.IsNullOrEmpty(normEdge) ? $"Edge AI: {normEdge} | " : "";
+
+                            // Tạo một cảnh báo riêng cho mỗi loại bạo lực phát hiện được
+                            foreach (var soundType in detectedTypes)
+                            {
+                                var typeLabel = soundType switch {
+                                    "dap_pha"  => AppConstants.SoundLabels.DapPha,
+                                    "help"     => AppConstants.SoundLabels.Help,
+                                    "threat"   => AppConstants.SoundLabels.Threat,
+                                    "scream"   => AppConstants.SoundLabels.Scream,
+                                    "argument" => AppConstants.SoundLabels.Argument,
+                                    _          => AppConstants.SoundLabels.Unknown
+                                };
+
+                                string notes;
+                                if (isNoDialogueFallback)
+                                {
+                                    notes = $"[{edgeInfo}{typeLabel}] Không có lời thoại.";
+                                }
+                                else
+                                {
+                                    notes = $"[{edgeInfo}{typeLabel}] Lời thoại: \"{allTranscript}\"";
+                                }
+
+                                string alertTranscript = isNoDialogueFallback ? "Không có lời thoại" : allTranscript;
+
+                                var alertRecord = await SubmitDetection(device.Id, soundType, finalConfidence, audioUrl, notes, audioBytes, dialogData, alertTranscript);
+                                createdAlerts.Add(alertRecord);
+                            }
                         }
                         else
                         {

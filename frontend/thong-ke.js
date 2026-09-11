@@ -18,7 +18,7 @@
       const labels = data.map(d => SOUND_TYPE_LABELS[d.sound_type]?.label || d.sound_type);
       const values = data.map(d => d.count);
       const colors = data.map(d => {
-        const c = { scream: '#DC2626', help: '#F97316', threat: '#EAB308', argument: '#6366f1' };
+        const c = { dap_pha: '#EF4444', scream: '#DC2626', help: '#F97316', threat: '#EAB308', argument: '#6366f1' };
         return c[d.sound_type] || '#94a3b8';
       });
 

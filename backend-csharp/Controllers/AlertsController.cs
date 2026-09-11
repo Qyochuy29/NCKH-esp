@@ -60,7 +60,8 @@ namespace SchoolGuardian.Api.Controllers
             [FromQuery(Name = "event_id")] string? eventId,
             [FromQuery(Name = "edge_class")] string? edgeClass,
             [FromServices] IConfiguration config,
-            [FromServices] ApplicationDbContext db)
+            [FromServices] ApplicationDbContext db,
+            [FromServices] IServiceScopeFactory scopeFactory)
         {
             var token = Request.Headers["X-Device-Token"].FirstOrDefault();
             if (string.IsNullOrEmpty(token) || token != config["DeviceToken"])
@@ -70,8 +71,8 @@ namespace SchoolGuardian.Api.Controllers
             var soundType = normalizedEventType switch
             {
                 "analyze" => "analyze",
-                "khoc" => "scream",
-                "dap_pha" => "threat",
+                "khoc" => "help",
+                "dap_pha" => "dap_pha",
                 "scream" => "scream",
                 "help" => "help",
                 "threat" => "threat",
@@ -148,25 +149,37 @@ namespace SchoolGuardian.Api.Controllers
 
             if (normalizedEventType == "analyze")
             {
-                var analysis = await _svc.AnalyzeUploadedAudio(
-                    audioUrl,
-                    fileName,
-                    device.Id,
-                    edgeClass,
-                    confidence);
+                var targetDeviceId = device.Id;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var scope = scopeFactory.CreateScope();
+                        var scopedSvc = scope.ServiceProvider.GetRequiredService<AlertsService>();
+                        await scopedSvc.AnalyzeUploadedAudio(
+                            audioUrl,
+                            fileName,
+                            targetDeviceId,
+                            edgeClass,
+                            confidence);
 
-                await System.IO.File.WriteAllTextAsync(
-                    analysisMarker,
-                    DateTime.UtcNow.ToString("O"),
-                    CancellationToken.None);
+                        await System.IO.File.WriteAllTextAsync(
+                            analysisMarker,
+                            DateTime.UtcNow.ToString("O"),
+                            CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Background AI Analyze Error]: {ex.Message}");
+                    }
+                });
 
                 return Ok(new
                 {
                     success = true,
                     local_saved = true,
-                    analyzed = true,
-                    file = fileName,
-                    analysis
+                    queued = true,
+                    file = fileName
                 });
             }
 
@@ -176,13 +189,22 @@ namespace SchoolGuardian.Api.Controllers
                 0.0,
                 100.0);
 
+            string espNote = eventType.ToLowerInvariant() switch
+            {
+                "dap_pha" => "ESP32 nhận diện: Đập phá (Không có lời thoại)",
+                "khoc" => "ESP32 nhận diện: Tiếng khóc (Không có lời thoại)",
+                _ => $"ESP32 nhận diện: {eventType}"
+            };
+
             var alert = await _svc.SubmitDetection(
                 device.Id,
                 soundType,
                 confidencePercent,
                 audioUrl,
-                $"ESP32 nhận diện: {eventType}",
-                audioBytes);
+                espNote,
+                audioBytes,
+                null,
+                (soundType == "dap_pha" || soundType == "help") ? "Không có lời thoại" : null);
 
             return Ok(new
             {

@@ -11,7 +11,7 @@ const char* password     = "MAT_KHAU_WIFI";       // Mật khẩu WiFi
 
 // IP máy tính đang chạy Docker (không phải 127.0.0.1)
 // Mở CMD: ipconfig → IPv4 Address, ví dụ: 192.168.1.100
-const char* serverHost   = "192.168.1.88";
+const char* serverHost   = "192.168.1.9";
 const int   serverPort   = 3000;
 const char* uploadPath   = "/api/alerts/upload";
 

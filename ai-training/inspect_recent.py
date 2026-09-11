@@ -18,7 +18,7 @@ files = sorted(glob.glob('/tai-lieu/Cam-HL1_*_analyze.wav'), key=os.path.getmtim
 print(f'Inspecting {len(files)} latest files...')
 for f in files:
     audio = AudioSegment.from_file(f)
-    cls, conf, cry_ts, scr_ts = classify_audio(audio)
+    cls, conf, cry_ts, scr_ts, imp_ts, sp_score = classify_audio(audio)
     txt, words, segs, _ = transcribe_vietnamese(whisper_model, audio)
     
     waveform = get_whisper_waveform(audio)
@@ -30,7 +30,7 @@ for f in files:
     print('='*60)
     print(f'FILE: {os.path.basename(f)}')
     print(f'Transcript: "{txt}"')
-    print(f'classify_audio -> class: {cls}, conf: {conf:.2f}, cry_ts: {cry_ts}, scr_ts: {scr_ts}')
+    print(f'classify_audio -> class: {cls}, conf: {conf:.2f}, cry_ts: {cry_ts}, scr_ts: {scr_ts}, imp_ts: {imp_ts}, speech_score: {sp_score:.2f}')
     print('Top YAMNet classes:')
     for idx in top_indices:
         name = class_names.get(idx, f"Unknown_{idx}")

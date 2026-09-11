@@ -24,7 +24,8 @@ namespace SchoolGuardian.Api.Models
         scream,
         help,
         threat,
-        argument
+        argument,
+        dap_pha
     }
 
     public enum AlertStatus

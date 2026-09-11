@@ -70,6 +70,7 @@ services:
     environment:
       - UPLOAD_DIR=/tai-lieu
       - WHISPER_MODEL_SIZE=small
+      - GROQ_API_KEY=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
     restart: unless-stopped
 
 volumes:

@@ -73,10 +73,17 @@ namespace SchoolGuardian.Api.Services
 
         public async Task Remove(string id)
         {
-            var count = await _db.Devices.CountAsync(d => d.AreaId == id);
-            if (count > 0) throw new InvalidOperationException($"Không thể xoá khu vực vì còn {count} thiết bị đang sử dụng");
-
             var area = await _db.Areas.FindAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy khu vực");
+            
+            // Xóa tất cả các thiết bị thuộc khu vực này (việc xóa thiết bị sẽ kích hoạt xóa alerts nếu ta xử lý thủ công)
+            var devices = await _db.Devices.Where(d => d.AreaId == id).ToListAsync();
+            foreach (var d in devices)
+            {
+                var alerts = await _db.Alerts.Where(a => a.DeviceId == d.Id).ToListAsync();
+                _db.Alerts.RemoveRange(alerts);
+            }
+            _db.Devices.RemoveRange(devices);
+
             _db.Areas.Remove(area);
             await _db.SaveChangesAsync();
         }

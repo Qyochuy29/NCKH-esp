@@ -101,8 +101,8 @@ namespace SchoolGuardian.Api.Controllers
                 safeEventId = Guid.NewGuid().ToString("N");
 
             var fileName = $"{safeEventId}_{normalizedEventType}.wav";
-            var audioUrl = $"/uploads/{fileName}";
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+            var audioUrl = $"/tai-lieu/{fileName}";
+            var uploadsDir = @"C:\NKKH\tai-lieu";
             Directory.CreateDirectory(uploadsDir);
             var analysisMarker = Path.Combine(uploadsDir, $"{safeEventId}.analyzed");
 

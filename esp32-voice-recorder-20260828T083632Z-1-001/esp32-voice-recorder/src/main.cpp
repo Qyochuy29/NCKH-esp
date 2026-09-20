@@ -30,9 +30,24 @@
 #define I2S_READ_SAMPLES 1024
 
 // ---------- CẤU HÌNH SERVER (Mạng LAN trực tiếp, không qua Cloudflare) ----------
-const char* serverBase    = "http://192.168.1.110:3000";
+const char* serverBase    = "http://172.20.10.11:3000";
 const char* deviceToken   = "your_secure_device_token_123";
-const char* deviceId      = "Cam-HL1";
+// ---------- DEVICE ID ----------
+char deviceId[24] = {0};
+
+void initDeviceId() {
+  const uint64_t chipId = ESP.getEfuseMac();
+
+  snprintf(
+    deviceId,
+    sizeof(deviceId),
+    "SV-%04X%08X",
+    (uint16_t)(chipId >> 32),
+    (uint32_t)chipId
+  );
+
+  Serial.printf("[DEVICE] ID: %s\n", deviceId);
+}
 
 
 // ---------- AUDIO BUFFER (PSRAM) ----------
@@ -728,7 +743,12 @@ static bool buildLogMelAndSetModelInput()
 // ============================================================
 void setup() {
   Serial.begin(115200);
-  delay(3000);
+  delay(1000);
+  
+  // Khoi tao ID cho thiet bi tu dia chi MAC phan cung
+  initDeviceId();
+
+  // Xem nguoi dung co giu nut BOOT khong?
   Serial.println("\n\n=== ESP32 BOOT (Hybrid AI) ===");
 
   WiFiManager wm;
@@ -745,9 +765,9 @@ void setup() {
   if (held) { Serial.println("Xóa WiFi!"); wm.resetSettings(); }
 
   // Ket noi uu tien truc tiep toi WiFi "Bui Tien Tuan"
-  Serial.println("Dang ket noi WiFi: VP_127");
+  Serial.println("Dang ket noi WiFi: okok");
   WiFi.mode(WIFI_STA);
-  WiFi.begin("VP_127", "Utehy@123");
+  WiFi.begin("okok", "Quochuy07");
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 25) {
     delay(500);
@@ -813,6 +833,7 @@ void setup() {
 //  LOOP
 // ============================================================
 void loop() {
+  Serial.printf("\n[DEVICE] ID: %s\n", deviceId);
   Serial.printf("[REC] Dang ghi am %d giay...\n", RECORD_SECONDS);
   writeWavHeader(wavBuf, BUFFER_BYTES);
   

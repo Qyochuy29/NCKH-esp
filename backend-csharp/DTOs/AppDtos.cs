@@ -108,6 +108,8 @@ namespace SchoolGuardian.Api.DTOs
     // ============================================================
     public class CreateDeviceDto
     {
+        [MaxLength(100)] public string? Id { get; set; }
+
         [Required(ErrorMessage = "Tên thiết bị không được để trống")]
         [MaxLength(100)] public string Name { get; set; } = string.Empty;
 
@@ -123,6 +125,7 @@ namespace SchoolGuardian.Api.DTOs
 
     public class UpdateDeviceDto
     {
+        public string? NewId                   { get; set; }
         [MaxLength(100)] public string? Name   { get; set; }
         public string? AreaId                  { get; set; }
         [Range(1, 100)] public int? Floor      { get; set; }

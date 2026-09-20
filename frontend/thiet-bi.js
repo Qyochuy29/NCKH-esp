@@ -13,6 +13,8 @@
   let allDevices = [];
   let currentPage = 1;
   const itemsPerPage = 10;
+  let isEditing = false;
+  let editingDeviceId = null;
 
   async function loadAreas() {
     try {
@@ -62,14 +64,16 @@
         <tr>
           <td><strong>${escapeHTML(d.name)}</strong></td>
           <td>${escapeHTML(areaName)}</td>
-          <td>Tầng ${d.floor}</td>
           <td><span class="badge ${statusBadge}">${statusLabel}</span></td>
           <td>
             <span style="color:${batteryColor};font-weight:600;">${d.battery_level}%</span>
             <span class="confidence-bar" style="width:50px;"><span class="confidence-bar-fill" style="width:${d.battery_level}%;background:${batteryColor}"></span></span>
           </td>
           <td>${formatRelative(d.last_seen)}</td>
-          <td><button class="btn btn-outline btn-sm" onclick='editDevice(${JSON.stringify(d).replace(/'/g, "\\'")})'><i class="bi bi-pencil"></i> Sửa</button></td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick='editDevice(${JSON.stringify(d).replace(/'/g, "\\'")})'><i class="bi bi-pencil"></i> Sửa</button>
+            <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--danger);" onclick='deleteDevice("${d.id}")'><i class="bi bi-trash"></i> Xóa</button>
+          </td>
         </tr>
       `;
     }).join('');
@@ -81,20 +85,22 @@
   }
 
   async function showAddModal() {
+    isEditing = false;
+    editingDeviceId = null;
     document.getElementById('modal-title').textContent = 'Thêm thiết bị mới';
     document.getElementById('device-id').value = '';
     document.getElementById('device-name').value = '';
-    document.getElementById('device-floor').value = '1';
     await loadAreas();
     document.getElementById('device-area').value = '';
     document.getElementById('device-modal').classList.add('active');
   }
 
   async function editDevice(d) {
+    isEditing = true;
+    editingDeviceId = d.id;
     document.getElementById('modal-title').textContent = 'Sửa thiết bị';
     document.getElementById('device-id').value = d.id;
     document.getElementById('device-name').value = d.name;
-    document.getElementById('device-floor').value = d.floor;
     await loadAreas();
     // Set area value: d.area_id or d.area.id
     const areaId = d.area_id || d.area?.id || '';
@@ -107,12 +113,12 @@
   }
 
   async function saveDevice() {
-    const id = document.getElementById('device-id').value;
+    const id = document.getElementById('device-id').value.trim();
     const area_id = document.getElementById('device-area').value;
     const data = {
       name: document.getElementById('device-name').value.trim(),
       area_id,
-      floor: parseInt(document.getElementById('device-floor').value),
+      floor: 1, // Mặc định là 1 do đã bỏ UI
       position_x: 0,
       position_y: 0,
     };
@@ -123,10 +129,19 @@
     }
 
     try {
-      if (id) {
-        await api('PUT', `/api/devices/${id}`, data);
+      if (isEditing && editingDeviceId) {
+        if (id && id !== editingDeviceId) {
+           data.new_id = id;
+           data.NewId = id;
+           data.newId = id;
+        }
+        await api('PUT', `/api/devices/${editingDeviceId}`, data);
         showToast('Thành công', 'Đã cập nhật thiết bị', 'success');
       } else {
+        if (id) {
+          data.id = id;
+          data.Id = id;
+        }
         await api('POST', '/api/devices', data);
         showToast('Thành công', 'Đã thêm thiết bị mới', 'success');
       }
@@ -141,4 +156,16 @@
   document.getElementById('device-modal').addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) closeDeviceModal();
   });
+
+  async function deleteDevice(id) {
+    if (!confirm('Bạn có chắc chắn muốn xóa thiết bị này? Toàn bộ dữ liệu cảnh báo liên quan cũng sẽ bị xóa.')) return;
+    try {
+      await api('DELETE', `/api/devices/${id}`);
+      showToast('Thành công', 'Đã xóa thiết bị', 'success');
+      loadDevices();
+    } catch (err) {
+      showToast('Lỗi', err.message, 'danger');
+    }
+  }
+  window.deleteDevice = deleteDevice;
 })();

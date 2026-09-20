@@ -55,6 +55,7 @@ namespace SchoolGuardian.Api.Services
         {
             var device = new Device
             {
+                Id = !string.IsNullOrWhiteSpace(dto.Id) ? dto.Id : Guid.NewGuid().ToString(),
                 Name = dto.Name,
                 AreaId = dto.AreaId,
                 Floor = dto.Floor,
@@ -69,6 +70,34 @@ namespace SchoolGuardian.Api.Services
         public async Task<object> Update(string id, UpdateDeviceDto dto)
         {
             var device = await _db.Devices.FindAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy thiết bị");
+            
+            // Đổi ID thiết bị bằng cách copy sang bản mới và xóa bản cũ
+            if (!string.IsNullOrWhiteSpace(dto.NewId) && dto.NewId != id)
+            {
+                var newDevice = new Device
+                {
+                    Id = dto.NewId,
+                    Name = dto.Name ?? device.Name,
+                    AreaId = dto.AreaId ?? device.AreaId,
+                    Floor = dto.Floor ?? device.Floor,
+                    PositionX = dto.PositionX ?? device.PositionX,
+                    PositionY = dto.PositionY ?? device.PositionY,
+                    Status = dto.Status != null ? Enum.Parse<DeviceStatus>(dto.Status) : device.Status,
+                    BatteryLevel = dto.BatteryLevel ?? device.BatteryLevel,
+                    LastSeen = DateTime.UtcNow
+                };
+                _db.Devices.Add(newDevice);
+                await _db.SaveChangesAsync();
+
+                var alerts = await _db.Alerts.Where(a => a.DeviceId == id).ToListAsync();
+                foreach (var a in alerts) a.DeviceId = dto.NewId;
+                await _db.SaveChangesAsync();
+
+                _db.Devices.Remove(device);
+                await _db.SaveChangesAsync();
+                return await FindOne(dto.NewId);
+            }
+
             if (dto.Name != null) device.Name = dto.Name;
             if (dto.AreaId != null) device.AreaId = dto.AreaId;
             if (dto.Floor.HasValue) device.Floor = dto.Floor.Value;
@@ -93,8 +122,8 @@ namespace SchoolGuardian.Api.Services
         public async Task Remove(string id)
         {
             var device = await _db.Devices.FindAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy thiết bị");
-            var hasAlerts = await _db.Alerts.AnyAsync(a => a.DeviceId == id);
-            if (hasAlerts) throw new InvalidOperationException("Không thể xóa thiết bị đã có lịch sử cảnh báo");
+            var alerts = await _db.Alerts.Where(a => a.DeviceId == id).ToListAsync();
+            _db.Alerts.RemoveRange(alerts); // Xóa sạch lịch sử để không bị vướng khóa ngoại
             _db.Devices.Remove(device);
             await _db.SaveChangesAsync();
         }

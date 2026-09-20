@@ -162,6 +162,7 @@
     }
       const confidence = Math.max(10, Math.min(95, Number(a.confidence_score) || 10));
       const confidenceLabel = getConfidenceLabel(confidence);
+      const statusObj = STATUS_LABELS[a.status] || { class: 'badge-warning', label: a.status || 'Chờ xử lý' };
       return `
       <div class="alert-card ${getSeverityClass(a.confidence_score)}" id="alert-${a.id}">
 
@@ -172,7 +173,7 @@
             <strong>${confidence.toFixed(0)}%</strong>
             <small style="font-weight:600;color:${getConfidenceColor(confidence)}">${confidenceLabel}</small>
           </span>
-          <span class="badge ${status.class}">${status.label}</span>
+          <span class="badge ${statusObj.class}">${statusObj.label}</span>
         </div>
         <div class="alert-card-meta">
           <span><i class="bi bi-geo-alt-fill"></i> ${escapeHTML(a.device?.area?.name || a.device?.area || '?')} — ${escapeHTML(a.device?.name || '')}</span>

@@ -151,6 +151,16 @@ app.UseStaticFiles(new StaticFileOptions
     ContentTypeProvider = provider,
     ServeUnknownFileTypes = true
 });
+
+var tailieuPath = @"C:\NKKH\tai-lieu";
+if (!Directory.Exists(tailieuPath)) Directory.CreateDirectory(tailieuPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(tailieuPath),
+    RequestPath = "/tai-lieu",
+    ContentTypeProvider = provider,
+    ServeUnknownFileTypes = true
+});
 var frontendPath = Path.Combine(Directory.GetCurrentDirectory(), "frontend");
 if (!Directory.Exists(frontendPath))
 {

@@ -24,7 +24,6 @@
                 <tr>
                   <th>Tên</th>
                   <th>Khu vực</th>
-                  <th>Tầng</th>
                   <th>Trạng thái</th>
                   <th>Pin</th>
                   <th>Cập nhật cuối</th>
@@ -46,7 +45,10 @@
             <button class="modal-close" onclick="closeDeviceModal()">✕</button>
           </div>
           <div class="modal-body">
-            <input type="hidden" id="device-id">
+            <div class="form-group">
+              <label>Mã phần cứng (Mã MAC)</label>
+              <input type="text" class="form-control" id="device-id" placeholder="VD: SV-EC3A92858428 (Để trống sẽ tạo tự động)">
+            </div>
             <div class="form-group">
               <label>Tên thiết bị</label>
               <input type="text" class="form-control" id="device-name" placeholder="VD: MIC-046">
@@ -56,14 +58,6 @@
                 <label>Khu vực</label>
                 <select class="form-control" id="device-area">
                   <option value="">-- Chọn khu vực --</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Tầng</label>
-                <select class="form-control" id="device-floor">
-                  <option value="1">Tầng 1</option>
-                  <option value="2">Tầng 2</option>
-                  <option value="3">Tầng 3</option>
                 </select>
               </div>
             </div>

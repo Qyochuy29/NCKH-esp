@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "ruS73nrHeug=",
+  "dgSpecHash": "ftjT1nIUQts=",
   "success": true,
-  "projectFilePath": "C:\\website\\web\\scratch\\scratch.csproj",
+  "projectFilePath": "C:\\NCKH-esp\\scratch\\scratch.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.data.sqlite\\10.0.10\\microsoft.data.sqlite.10.0.10.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.data.sqlite.core\\10.0.10\\microsoft.data.sqlite.core.10.0.10.nupkg.sha512",

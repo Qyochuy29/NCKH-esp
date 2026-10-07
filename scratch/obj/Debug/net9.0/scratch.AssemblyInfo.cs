@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("scratch")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1c2a21a06f7e6e6fcaf03d1282bbd610fa9f76ad")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+07a84ebd2f5301b7eb37b243be69b481e4f934d0")]
 [assembly: System.Reflection.AssemblyProductAttribute("scratch")]
 [assembly: System.Reflection.AssemblyTitleAttribute("scratch")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

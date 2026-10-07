@@ -15,6 +15,7 @@ namespace SchoolGuardian.Api.Data
         public DbSet<Area> Areas { get; set; }
         public DbSet<Device> Devices { get; set; }
         public DbSet<Alert> Alerts { get; set; }
+        public DbSet<AudioAnalysis> AudioAnalyses { get; set; }
         public DbSet<AlertLog> AlertLogs { get; set; }
         public DbSet<Setting> Settings { get; set; }
         public DbSet<Student> Students { get; set; }

@@ -15,6 +15,28 @@
 
   loadAreaFilter();
   loadHistory();
+  loadAudioHistory();
+
+  async function loadAudioHistory() {
+    const container = document.getElementById('audio-analysis-history');
+    try {
+      const result = await api('GET', '/api/alerts/analyses?limit=20');
+      container.innerHTML = result.data.length ? result.data.map(a => `
+        <p>${formatDateTime(a.created_at)} — ${escapeHTML(a.original_name || a.audio_file_url.split('/').pop())}
+          <strong>${riskLabel(a.analysis)}</strong>
+          <button class="btn btn-sm btn-outline" data-analysis-id="${escapeHTML(a.id)}">Xem transcript và bằng chứng</button>
+        </p>`).join('') : '<p>Chưa có audio được phân tích.</p>';
+      container.querySelectorAll('[data-analysis-id]').forEach(button => {
+        button.addEventListener('click', async () => {
+          try {
+            const analysis = await api('GET', '/api/alerts/analyses/' + encodeURIComponent(button.dataset.analysisId));
+            document.getElementById('modal-body').innerHTML = renderAnalysisReport(analysis);
+            document.getElementById('detail-modal').classList.add('active');
+          } catch (error) { showToast('Lỗi', error.message, 'danger'); }
+        });
+      });
+    } catch (error) { container.textContent = 'Không tải được lịch sử phân tích audio: ' + error.message; }
+  }
 
   // WebSocket: live updates for History
   onWsEvent('new-alert', (alert) => {
@@ -80,8 +102,7 @@
           <td>${escapeHTML(a.device?.area?.name || a.device?.area || '?')}</td>
           <td>${escapeHTML(a.device?.name || '?')}</td>
           <td>
-            <span class="confidence-bar"><span class="confidence-bar-fill" style="width:${a.confidence_score}%;background:${getConfidenceColor(a.confidence_score)}"></span></span>
-            ${a.confidence_score.toFixed(0)}%
+            ${riskLabel(a)}
           </td>
           <td><span class="badge ${status.class}">${status.label}</span></td>
           <td>${escapeHTML(a.handled_by?.full_name || '—')}</td>
@@ -130,7 +151,7 @@
           <div><strong>Trạng thái:</strong> <span class="badge ${status.class}">${status.label}</span></div>
           <div><strong>Khu vực:</strong> ${escapeHTML(alert.device?.area?.name || alert.device?.area || '?')}</div>
           <div><strong>Thiết bị:</strong> ${escapeHTML(alert.device?.name || '?')}</div>
-          <div><strong>Confidence:</strong> ${alert.confidence_score.toFixed(1)}%</div>
+          <div><strong>Nguy cơ:</strong> ${riskLabel(alert)}</div>
           <div><strong>Thời gian:</strong> ${formatDateTime(alert.timestamp)}</div>
           <div><strong>Người xử lý:</strong> ${escapeHTML(alert.handled_by?.full_name || '—')}</div>
           <div><strong>Xử lý lúc:</strong> ${alert.resolved_at ? formatDateTime(alert.resolved_at) : '—'}</div>
@@ -142,6 +163,7 @@
         }</div>` : ''}
         ${alert.audio_file_url ? `<div style="margin-bottom:12px;"><strong>Audio:</strong><br><audio controls style="margin-top:4px;"><source src="${alert.audio_file_url}"></audio></div>` : ''}
         <div><strong>Bằng chứng:</strong> ${alert.is_evidence ? '✅ Đã đánh dấu' : '❌ Không'}</div>
+        ${renderAnalysisReport(alert.dialog_data)}
         ${logsHtml}
       `;
 
@@ -166,13 +188,13 @@
       return;
     }
 
-    const headers = ['Thời gian', 'Loại', 'Khu vực', 'Thiết bị', 'Confidence', 'Trạng thái', 'Người xử lý', 'Ghi chú'];
+    const headers = ['Thời gian', 'Loại', 'Khu vực', 'Thiết bị', 'Nguy cơ', 'Trạng thái', 'Người xử lý', 'Ghi chú'];
     const rows = currentData.map(a => [
       formatDateTime(a.timestamp),
       SOUND_TYPE_LABELS[a.sound_type]?.label || a.sound_type,
       a.device?.area?.name || a.device?.area || '',
       a.device?.name || '',
-      a.confidence_score.toFixed(1) + '%',
+      riskLabel(a),
       STATUS_LABELS[a.status]?.label || a.status,
       a.handled_by?.full_name || '',
       (a.notes || '').replace(/,/g, ';'),

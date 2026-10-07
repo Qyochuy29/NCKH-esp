@@ -123,7 +123,7 @@ let wsCallbacks = [];
 function setupWebSocket() {
   if (typeof signalR === 'undefined') {
     const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js';
+    script.src = '/vendor/signalr.min.js';
     script.onload = () => connectWebSocket();
     document.head.appendChild(script);
   } else {
@@ -204,13 +204,13 @@ function showAlertToast(alert) {
     argument: '<i class="bi bi-chat-right-text" style="color:var(--info)"></i> Cãi vã',
   };
 
-  const severity = alert.confidence_score >= 85 ? 'danger' : alert.confidence_score >= 70 ? 'warning' : 'info';
+  const severity = alert.risk_level === 'high' ? 'danger' : alert.risk_level === 'review' ? 'warning' : 'info';
   const area = alert.device?.area?.name || alert.device?.area || 'Không xác định';
   const label = typeLabels[alert.sound_type] || alert.sound_type;
 
   showToast(
     `${label}`,
-    `Khu vực: ${area} — Độ tin cậy: ${alert.confidence_score.toFixed(0)}%<br/><br/>
+    `Khu vực: ${area} — Nguy cơ: ${riskLabel(alert)}<br/><br/>
     <small style="font-style:italic;color:#666;">${alert.notes ? alert.notes : ''}</small>`,
     severity
   );
@@ -451,25 +451,6 @@ const STATUS_LABELS = {
   resolved: { label: 'Đã xử lý', class: 'badge-success' },
 };
 
-function getSeverityClass(confidence) {
-  if (confidence >= 85) return 'severity-high';
-  if (confidence >= 70) return 'severity-medium';
-  return 'severity-low';
-}
-
-function getConfidenceColor(confidence) {
-  if (confidence >= 85) return 'var(--danger)';
-  if (confidence >= 70) return 'var(--warning)';
-  return 'var(--caution)';
-}
-
-function getConfidenceLabel(confidence) {
-  if (confidence >= 85) return 'Rất cao';
-  if (confidence >= 70) return 'Cao';
-  if (confidence >= 40) return 'Trung bình';
-  return 'Thấp';
-}
-
 /* ========== PAGINATION ========== */
 window.renderPagination = function(totalItems, itemsPerPage, currentPage, containerId, onPageChange) {
   const container = document.getElementById(containerId);
@@ -521,3 +502,70 @@ function initPage(pageId) {
   updateNotificationBadge();
   return user;
 }
+
+
+function riskLabel(value) {
+  const risk = typeof value === 'string' ? value : value?.risk_level || value?.analysis?.risk_level || value?.dialog_data?.analysis?.risk_level;
+  return ({low:'THẤP',review:'CẦN XEM LẠI',high:'CAO'})[risk] || 'Chưa đánh giá ngữ cảnh';
+}
+
+function analysisTime(seconds) {
+  const ticks = Math.round(Math.max(0, Number(seconds) || 0)*10);
+  return String(Math.floor(ticks/600)).padStart(2,'0') + ':' + ((ticks%600)/10).toFixed(1).padStart(4,'0');
+}
+
+function renderAnalysisReport(result) {
+  if (!result?.asr || !result?.analysis) {
+    return '<p>Bản ghi cũ chưa có phân tích ngữ cảnh/timeline. Cần phân tích lại audio gốc.</p>';
+  }
+  const asr=result.asr, analysis=result.analysis;
+  const uncertain=asr.quality==='review' || asr.status!=='success';
+  const segments=asr.segments || [];
+  const events=(result.timeline || []).filter(e => e.type !== 'speech');
+  const names={scream:'Tiếng hét',crying:'Tiếng khóc',baby_cry:'Tiếng trẻ nhỏ khóc',impact:'Va đập',loud_speech:'Tiếng nói lớn',speech:'Lời nói',speech_activity:'Có tiếng nói (YAMNet)',music:'Nhạc',applause:'Vỗ tay/cổ vũ',door:'Đóng cửa',unusual:'Âm thanh chưa phân loại trong nhóm theo dõi'};
+  const category={possible_physical_violence:'Có thể có xung đột thể chất',possible_verbal_abuse:'Có thể có bạo lực bằng lời nói',profanity:'Chửi tục',threat_or_distress:'Đe dọa hoặc kêu cứu',verbal_conflict:'Tranh cãi',ambiguous_audio:'Âm thanh cần xác minh',insufficient_evidence:'Chưa đủ bằng chứng'};
+  const url=result.audio?.original_audio_url || result.original_audio_url;
+  const safeUrl=typeof url==='string' && /^\/(uploads|tai-lieu)\//.test(url) && !url.includes('..') ? url : null;
+  const signalNames={insult:'Lời xúc phạm',profanity:'Chửi tục',threat:'Đe dọa',help:'Kêu cứu',victim:'Yêu cầu dừng hành vi'};
+  const evidence=analysis.evidence_items || [];
+  const messages=segments.map((s,i)=>({ ...s,type:'speech',index:i+1 }));
+  const acoustic=events.filter(e=>['scream','crying','impact','loud_speech'].includes(e.type));
+  const conversation=[...messages,...acoustic].sort((a,b)=>a.start-b.start);
+  const timeButton=(start,end)=>`<button type="button" class="ai-chat-time" data-ai-seek="${Math.max(0,Number(start)||0)}" ${safeUrl ? '' : 'disabled'} title="Nghe từ thời điểm này"><i class="bi bi-play-circle" aria-hidden="true"></i> ${analysisTime(start)}${end!=null ? '–'+analysisTime(end) : ''}</button>`;
+  const rows=conversation.map(s=>{
+    if(s.type!=='speech') return `<div class="ai-chat-event">${timeButton(s.start)}<span><i class="bi bi-soundwave" aria-hidden="true"></i> ${escapeHTML(names[s.type]||s.type)}${s.strength==='tentative' ? ' · tín hiệu yếu' : ''}</span></div>`;
+    const flags=s.accepted===false ? [] : [...new Set(evidence.filter(e=>e.kind==='speech' && s.text.includes(e.text || '\u0000') && e.start<=s.end && e.end>=s.start).map(e=>signalNames[e.signal]).filter(Boolean))];
+    return `<article class="ai-chat-message${s.accepted===false ? ' ai-chat-unverified' : ''}">
+      <div class="ai-chat-index" aria-hidden="true">${String(s.index).padStart(2,'0')}</div>
+      <div class="ai-chat-bubble"><div class="ai-chat-meta"><strong>Đoạn ${s.index}</strong>${timeButton(s.start,s.end)}</div>
+      <p class="ai-chat-text">${escapeHTML(s.text)}</p>
+      ${flags.length || s.accepted===false ? `<div class="ai-chat-tags">${flags.map(f=>`<span>${escapeHTML(f)}</span>`).join('')}${s.accepted===false ? '<span>Chưa xác minh lời nói</span>' : ''}</div>` : ''}</div>
+    </article>`;
+  }).join('');
+  return `<section class="ai-analysis-report">
+    <div class="ai-chat-verdict"><div class="ai-chat-verdict-top"><span><i class="bi bi-stars" aria-hidden="true"></i> AI nhận xét</span><strong class="ai-chat-risk ai-chat-risk-${['low','review','high'].includes(analysis.risk_level) ? analysis.risk_level : 'review'}">${riskLabel(analysis)}</strong></div>
+    <h4>${escapeHTML(category[analysis.category]||analysis.category)}</h4><p>${escapeHTML(analysis.summary)}</p>
+    ${typeof analysis.has_profanity==='boolean' ? `<div class="ai-chat-findings"><span>Chửi tục: <strong>${analysis.has_profanity ? 'Có' : uncertain ? 'Chưa xác định' : 'Chưa nhận diện'}</strong></span><span>Xúc phạm: <strong>${analysis.has_insults ? 'Có' : uncertain ? 'Chưa xác định' : 'Chưa nhận diện'}</strong></span></div>` : ''}</div>
+    ${analysis.analysis_version!=='rules-3.0' ? '<p class="ai-chat-notice">Bản phân tích cũ, chưa được cập nhật bằng bản AI mới.</p>' : ''}
+    ${safeUrl ? `<div class="ai-chat-player"><span><i class="bi bi-headphones" aria-hidden="true"></i> Nghe bản ghi gốc</span><audio controls preload="metadata" src="${escapeHTML(safeUrl)}"></audio></div>` : ''}
+    <div class="ai-chat-heading"><h4>Nội dung hội thoại</h4><span>${segments.length} đoạn lời nói</span></div>
+    <p class="ai-chat-hint">${safeUrl ? 'Bấm thời gian để nghe lại. ' : ''}Các đoạn được sắp theo thời gian; chưa phân biệt người nói.</p>
+    ${uncertain ? '<p class="ai-chat-notice">Lời nói chưa được nhận dạng đầy đủ hoặc cần xác minh.</p>' : ''}
+    <div class="ai-chat-thread">${rows || '<p class="ai-chat-empty">Chưa nhận dạng được lời nói hoặc sự kiện âm thanh.</p>'}</div>
+    <details class="ai-chat-technical"><summary>Xem bằng chứng và thông tin kỹ thuật</summary>
+    <ul>${(analysis.evidence||[]).map(e=>`<li>${escapeHTML(e)}</li>`).join('')}</ul>
+    <p style="white-space:pre-wrap">Transcript gốc: ${escapeHTML(asr.raw_transcript || '')}</p>
+    ${events.length ? events.map(e=>`<p><strong>${analysisTime(e.start)}–${analysisTime(e.end)}</strong> ${escapeHTML(names[e.type]||e.type)}${e.class_name ? ': '+escapeHTML(e.class_name):''} <small>(điểm YAMNet: ${Number(e.score).toFixed(3)}${e.strength==='tentative' ? '; tín hiệu yếu, cần xác minh':''})</small></p>`).join('') : '<p>Không có sự kiện vượt ngưỡng theo dõi.</p>'}
+    <ul>${(analysis.limitations||[]).map(e=>`<li>${escapeHTML(e)}</li>`).join('')}</ul></details>
+  </section>`;
+}
+
+document.addEventListener('click',event=>{
+  const button=event.target.closest?.('[data-ai-seek]');
+  if(!button || button.disabled) return;
+  const audio=button.closest('.ai-analysis-report')?.querySelector('audio');
+  if(!audio) return;
+  const seek=()=>{audio.currentTime=Math.max(0,Number(button.dataset.aiSeek)||0);audio.play().catch(()=>{});};
+  if(audio.readyState>=1) seek();
+  else {audio.addEventListener('loadedmetadata',seek,{once:true});audio.load();}
+});

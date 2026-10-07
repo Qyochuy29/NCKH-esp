@@ -1,79 +1,130 @@
+name: safevoice
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: sg-postgres
     environment:
       POSTGRES_DB: school_guardian
       POSTGRES_USER: sguser
-      POSTGRES_PASSWORD: sgpassword123
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run Chay_Docker.bat first}
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sguser -d school_guardian"]
+      test: [CMD-SHELL, "pg_isready -U sguser -d school_guardian"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 30
     restart: unless-stopped
+    logging: *logging
 
   redis:
     image: redis:7-alpine
-    container_name: sg-redis
-    ports:
-      - "6379:6379"
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD, redis-cli, ping]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 30
     restart: unless-stopped
+    logging: *logging
 
   backend:
+    image: safevoice-web:local
     build:
-      context: ./backend-csharp
-      dockerfile: Dockerfile
-    container_name: sg-backend
+      context: .
+      dockerfile: Dockerfile.csharp
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     volumes:
-      - ./frontend:/app/frontend
-      - ./tai-lieu:/app/uploads
+      - audio_data:/app/uploads
       - dp_keys:/root/.aspnet/DataProtection-Keys
     environment:
-      ConnectionStrings__DefaultConnection: "Host=postgres;Database=school_guardian;Username=sguser;Password=sgpassword123;Port=5432"
-      Redis__ConnectionString: "redis:6379"
-      Jwt__Secret: "school-guardian-jwt-secret-key-2024"
-      Jwt__RefreshSecret: "school-guardian-refresh-secret-key-2024"
-      ASPNETCORE_ENVIRONMENT: "Production"
-      ASPNETCORE_URLS: "http://+:3000"
-      AiService__Url: "http://ai-service:5000"
-    restart: unless-stopped
+      ConnectionStrings__DefaultConnection: "Host=postgres;Database=school_guardian;Username=sguser;Password=${POSTGRES_PASSWORD};Port=5432"
+      Redis__ConnectionString: redis:6379
+      Jwt__Secret: ${JWT_SECRET:?Run Chay_Docker.bat first}
+      Jwt__RefreshSecret: ${JWT_REFRESH_SECRET:?Run Chay_Docker.bat first}
+      DeviceToken: ${DEVICE_TOKEN:-your_secure_device_token_123}
+      Storage__AudioPath: /app/uploads
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:3000
+      AiService__Url: http://ai-service:5000
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, -fsS, http://localhost:3000/health]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    logging: *logging
 
   ai-service:
+    image: safevoice-ai:local
     build:
       context: ./ai-training
       dockerfile: Dockerfile
-    container_name: sg-ai
-    ports:
-      - "5000:5000"
     volumes:
-      - ./ai-training:/app
-      - ./tai-lieu:/tai-lieu
+      - audio_data:/tai-lieu
       - ai_cache:/root/.cache
     environment:
-      - UPLOAD_DIR=/tai-lieu
-      - WHISPER_MODEL_SIZE=small
-      - GROQ_API_KEY=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
+      UPLOAD_DIR: /tai-lieu
+      TFHUB_CACHE_DIR: /root/.cache/tfhub
+      HF_HOME: /root/.cache/huggingface
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-medium}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
+      ASR_MODE: ${ASR_MODE:-local}
+      REASONING_MODE: ${REASONING_MODE:-rules}
+      CREATE_CENSORED_AUDIO: ${CREATE_CENSORED_AUDIO:-false}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 15m
     restart: unless-stopped
+    logging: *logging
+
+  audio-receiver:
+    image: safevoice-audio:local
+    build:
+      context: ./websocket
+    ports:
+      - "${AUDIO_PORT:-8765}:8765"
+    volumes:
+      - audio_data:/tai-lieu
+    environment:
+      UPLOAD_DIR: /tai-lieu
+      BACKEND_URL: http://backend:3000/api/alerts/analyze-existing
+      DEVICE_TOKEN: ${DEVICE_TOKEN:-your_secure_device_token_123}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('localhost', 8765), 5).close()"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    logging: *logging
 
 volumes:
   pg_data:
+  redis_data:
+  audio_data:
   dp_keys:
   ai_cache:

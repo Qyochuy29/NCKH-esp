@@ -26,7 +26,8 @@ namespace SchoolGuardian.Api.Services
             var devicesOnline = await d.CountAsync(x => x.Status == DeviceStatus.online);
             var totalDevices = await d.CountAsync();
             var alertsToday = await q.CountAsync(a => a.Timestamp >= today);
-            var pendingUrgent = await q.CountAsync(a => a.Status == AlertStatus.pending && a.ConfidenceScore >= 80);
+            var pendingUrgent = await q.CountAsync(a => a.Status == AlertStatus.pending &&
+                (a.RiskLevel == "high" || (a.RiskLevel == null && a.ConfidenceScore >= 80)));
             var avgResponse = await GetAvgResponseTime(q);
 
             return new { devices_online = devicesOnline, total_devices = totalDevices, alerts_today = alertsToday, pending_urgent = pendingUrgent, avg_response_minutes = avgResponse };

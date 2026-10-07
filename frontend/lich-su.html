@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lịch sử cảnh báo — SafeVoice AI</title>
-  <link rel="stylesheet" href="./giao-dien.css">
+  <link rel="stylesheet" href="./giao-dien.css?v=ai-chat-1">
 </head>
 <body>
   <div class="app-layout">
@@ -46,7 +46,7 @@
                   <th>Loại</th>
                   <th>Khu vực</th>
                   <th>Thiết bị</th>
-                  <th>Confidence</th>
+                  <th>Nguy cơ</th>
                   <th>Trạng thái</th>
                   <th>Người xử lý</th>
                   <th>Audio</th>
@@ -57,6 +57,14 @@
             </table>
           </div>
           <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+
+      <!-- Detail Modal -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-body">
+          <h3>Audio đã phân tích (gồm cả nguy cơ thấp)</h3>
+          <div id="audio-analysis-history"></div>
         </div>
       </div>
 
@@ -74,7 +82,7 @@
     </main>
   </div>
 
-  <script src="./dung-chung.js?v=3"></script>
-  <script src="./lich-su.js"></script>
+  <script src="./dung-chung.js?v=ai-chat-1"></script>
+  <script src="./lich-su.js?v=8"></script>
 </body>
 </html>

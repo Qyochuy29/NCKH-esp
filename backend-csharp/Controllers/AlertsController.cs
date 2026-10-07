@@ -5,6 +5,7 @@ using SchoolGuardian.Api.Extensions;
 using SchoolGuardian.Api.DTOs;
 using SchoolGuardian.Api.Services;
 using SchoolGuardian.Api.Data;
+using System.Collections.Concurrent;
 
 namespace SchoolGuardian.Api.Controllers
 {
@@ -14,7 +15,19 @@ namespace SchoolGuardian.Api.Controllers
     public class AlertsController : ControllerBase
     {
         private readonly AlertsService _svc;
+        private static readonly ConcurrentDictionary<string, byte> ActiveAnalyses = new();
         public AlertsController(AlertsService svc) => _svc = svc;
+
+        [HttpGet("analyses")]
+        public async Task<IActionResult> FindAnalyses([FromQuery] int offset = 0, [FromQuery] int limit = 20)
+            => Ok(await _svc.FindAnalyses(User.GetUserRole(), User.GetUserId(), offset, limit));
+
+        [HttpGet("analyses/{id}")]
+        public async Task<IActionResult> FindAnalysis(string id)
+        {
+            try { return Ok(await _svc.FindAnalysis(id, User.GetUserRole(), User.GetUserId())); }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        }
 
         [HttpGet]
         public async Task<IActionResult> FindAll([FromQuery] AlertQueryDto query)
@@ -102,11 +115,12 @@ namespace SchoolGuardian.Api.Controllers
 
             var fileName = $"{safeEventId}_{normalizedEventType}.wav";
             var audioUrl = $"/tai-lieu/{fileName}";
-            var uploadsDir = @"C:\NKKH\tai-lieu";
+            var uploadsDir = config["Storage:AudioPath"]
+                ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
             Directory.CreateDirectory(uploadsDir);
             var analysisMarker = Path.Combine(uploadsDir, $"{safeEventId}.analyzed");
 
-            if (normalizedEventType == "analyze" && System.IO.File.Exists(analysisMarker))
+            if (System.IO.File.Exists(analysisMarker))
             {
                 return Ok(new
                 {
@@ -142,13 +156,26 @@ namespace SchoolGuardian.Api.Controllers
                 System.Text.Encoding.ASCII.GetString(audioBytes, 8, 4) != "WAVE")
                 return BadRequest(new { message = "Body must be a WAV file" });
 
-            await System.IO.File.WriteAllBytesAsync(
-                Path.Combine(uploadsDir, fileName),
-                audioBytes,
-                HttpContext.RequestAborted);
-
-            if (normalizedEventType == "analyze")
+            var originalPath = Path.Combine(uploadsDir, fileName);
+            try
             {
+                await using var output = new FileStream(originalPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                await output.WriteAsync(audioBytes, HttpContext.RequestAborted);
+            }
+            catch (IOException) when (System.IO.File.Exists(originalPath))
+            {
+                byte[] existingBytes;
+                try { existingBytes = await System.IO.File.ReadAllBytesAsync(originalPath, HttpContext.RequestAborted); }
+                catch (IOException) { return Conflict(new { message = "Original audio is being saved; retry later" }); }
+                if (!audioBytes.SequenceEqual(existingBytes))
+                    return Conflict(new { message = "Event ID already belongs to a different original audio" });
+            }
+
+            // Every waveform goes through the same contextual pipeline. Edge labels are evidence only.
+            if (soundType != null)
+            {
+                if (!ActiveAnalyses.TryAdd(originalPath, 0))
+                    return Ok(new { success = true, duplicate = true, queued = true, file = fileName });
                 var targetDeviceId = device.Id;
                 _ = Task.Run(async () =>
                 {
@@ -172,6 +199,7 @@ namespace SchoolGuardian.Api.Controllers
                     {
                         Console.WriteLine($"[Background AI Analyze Error]: {ex.Message}");
                     }
+                    finally { ActiveAnalyses.TryRemove(originalPath, out _); }
                 });
 
                 return Ok(new
@@ -184,41 +212,13 @@ namespace SchoolGuardian.Api.Controllers
             }
 
 
-            var confidencePercent = Math.Clamp(
-                confidence <= 1.0 ? confidence * 100.0 : confidence,
-                0.0,
-                100.0);
-
-            string espNote = eventType.ToLowerInvariant() switch
-            {
-                "dap_pha" => "ESP32 nhận diện: Đập phá (Không có lời thoại)",
-                "khoc" => "ESP32 nhận diện: Tiếng khóc (Không có lời thoại)",
-                _ => $"ESP32 nhận diện: {eventType}"
-            };
-
-            var alert = await _svc.SubmitDetection(
-                device.Id,
-                soundType,
-                confidencePercent,
-                audioUrl,
-                espNote,
-                audioBytes,
-                null,
-                (soundType == "dap_pha" || soundType == "help") ? "Không có lời thoại" : null);
-
-            return Ok(new
-            {
-                success = true,
-                local_saved = true,
-                event_type = eventType,
-                website_sound_type = soundType,
-                file = fileName,
-                alert
-            });
+            return BadRequest(new { message = "Unsupported event type" });
         }
 
         [HttpPost("upload")]
         [AllowAnonymous]
+        [RequestSizeLimit(51 * 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 50 * 1024 * 1024)]
         public async Task<IActionResult> UploadAudio(IFormFile? audio, [FromServices] IConfiguration config)
         {
             // Cho phép ESP32/thiết bị phần cứng dùng X-Device-Token thay cho JWT
@@ -240,7 +240,7 @@ namespace SchoolGuardian.Api.Controllers
             if (!allowedExts.Contains(ext))
                 return BadRequest(new { error = "Invalid file type. Allowed audio & video: .wav, .mp3, .m4a, .mp4, .webm, .mkv, .mov" });
 
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+            var uploadsDir = config["Storage:AudioPath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
             Directory.CreateDirectory(uploadsDir);
             var fileName = $"{Guid.NewGuid():N}{Path.GetExtension(audio.FileName)}";
             var filePath = Path.Combine(uploadsDir, fileName);
@@ -269,13 +269,17 @@ namespace SchoolGuardian.Api.Controllers
 
             if (string.IsNullOrEmpty(dto.FileName))
                 return BadRequest(new { error = "FileName is required" });
+            if (Path.GetFileName(dto.FileName) != dto.FileName || dto.FileName.Contains('/') || dto.FileName.Contains('\\'))
+                return BadRequest(new { error = "FileName must be a file name, without directories" });
 
             // File đã nằm trong thư mục uploads/ (hoặc tai-lieu) nhờ websocket_receiver
             return Ok(await _svc.AnalyzeUploadedAudio($"/uploads/{dto.FileName}", dto.FileName));
         }
 
         [HttpPost("upload-dialog")]
-        public async Task<IActionResult> UploadDialogAudio(IFormFile audio)
+        [RequestSizeLimit(51 * 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 50 * 1024 * 1024)]
+        public async Task<IActionResult> UploadDialogAudio(IFormFile audio, [FromServices] IConfiguration config)
         {
             if (audio == null || audio.Length == 0)
                 return BadRequest(new { error = "No file uploaded" });
@@ -288,7 +292,7 @@ namespace SchoolGuardian.Api.Controllers
             if (!allowedExts.Contains(ext))
                 return BadRequest(new { error = "Invalid file type. Allowed: .wav, .mp3, .m4a" });
 
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+            var uploadsDir = config["Storage:AudioPath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
             Directory.CreateDirectory(uploadsDir);
             var fileName = $"{Guid.NewGuid():N}{Path.GetExtension(audio.FileName)}";
             var filePath = Path.Combine(uploadsDir, fileName);

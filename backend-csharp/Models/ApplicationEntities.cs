@@ -183,6 +183,9 @@ namespace SchoolGuardian.Api.Models
         [Column("confidence_score")]
         public double ConfidenceScore { get; set; }
 
+        [Column("risk_level")]
+        public string? RiskLevel { get; set; }
+
         [Column("audio_file_url")]
         public string? AudioFileUrl { get; set; }
 
@@ -223,6 +226,21 @@ namespace SchoolGuardian.Api.Models
         public User? HandledBy { get; set; }
 
         public ICollection<AlertLog> Logs { get; set; }
+    }
+
+    [Table("audio_analyses")]
+    public class AudioAnalysis
+    {
+        [Key, Column("id")]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        [Column("device_id")]
+        public string DeviceId { get; set; } = string.Empty;
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        [Column("audio_file_url")]
+        public string AudioFileUrl { get; set; } = string.Empty;
+        [Column("result_json")]
+        public string ResultJson { get; set; } = string.Empty;
     }
 
     [Table("alert_logs")]

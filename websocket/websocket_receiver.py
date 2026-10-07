@@ -16,6 +16,7 @@ Tính năng:
 from __future__ import annotations
 
 import numpy as np
+import os
 import asyncio
 import json
 import logging
@@ -58,7 +59,13 @@ class Config:
     denoise_beta: float = 0.08
 
 
-CONFIG = Config()
+CONFIG = Config(
+    host=os.environ.get("AUDIO_HOST", "0.0.0.0"),
+    port=int(os.environ.get("AUDIO_PORT", "8765")),
+    output_dir=Path(os.environ.get("UPLOAD_DIR", str(Path(__file__).parent.parent / "tai-lieu"))),
+    backend_url=os.environ.get("BACKEND_URL", "http://localhost:3000/api/alerts/analyze-existing"),
+    device_token=os.environ.get("DEVICE_TOKEN", "your_secure_device_token_123"),
+)
 
 HEADER_FORMAT = "<BBIBH"  # codec(B), deviceID(B), sampleRate(I), bitDepth(B), payloadLength(H)
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)

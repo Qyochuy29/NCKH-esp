@@ -10,17 +10,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+ARG INSTALL_CUDA_LIBS=0
+RUN if [ "$INSTALL_CUDA_LIBS" = "1" ]; then \
+    pip install --no-cache-dir 'nvidia-cublas-cu12>=12,<13' 'nvidia-cudnn-cu12>=9,<10'; \
+    fi
 
 # Copy toàn bộ mã nguồn
-COPY . .
+COPY server.py transcription.py asr_runtime.py windows_cuda.py analysis_pipeline.py audio_events.py context_analysis.py yamnet_class_map.csv ./
 
 # Set biến môi trường
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONIOENCODING=utf-8
 ENV UPLOAD_DIR=/tai-lieu
-ENV WHISPER_MODEL_SIZE=small
+ENV WHISPER_MODEL_SIZE=medium
+ENV ASR_MODE=local
+ENV REASONING_MODE=rules
 
 EXPOSE 5000
 
-CMD ["python", "server.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "1", "--timeout", "900", "--access-logfile", "-", "--error-logfile", "-", "server:app"]
 

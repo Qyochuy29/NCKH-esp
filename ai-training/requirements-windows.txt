@@ -1,0 +1,5 @@
+-r requirements.txt
+-r ../websocket/requirements.txt
+waitress==3.0.2
+nvidia-cublas-cu12>=12,<13
+nvidia-cudnn-cu12>=9,<10

@@ -9,6 +9,7 @@ __pycache__/
 *.env
 ai-training/__pycache__/
 test_*.py
+!ai-training/tests/test_*.py
 
 # .NET / C#
 bin/
@@ -20,6 +21,11 @@ backend-csharp/obj/
 
 # Docker data
 pg_data/
+backups/
+.docker-gpu
+.runtime/
+.venv/
+backend-csharp/uploads/
 
 # OS / Editor files
 .DS_Store

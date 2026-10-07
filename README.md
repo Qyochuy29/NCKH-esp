@@ -2,6 +2,14 @@
 
 Hệ thống giám sát và cảnh báo bạo lực học đường ứng dụng AI nhận diện âm thanh.
 
+**Chạy trực tiếp trên Windows, không cần Docker:** xem [WINDOWS.md](WINDOWS.md).
+Chạy `Cai_Dat_Website.bat` để cài, `Chay_Website_Windows.bat` để bật và
+`Tat_Website_Windows.bat` để tắt.
+
+**Chạy Docker trọn bộ:** xem [DOCKER.md](DOCKER.md). Nhấp đúp
+`Chay_Docker.bat` để bật, `Tat_Docker.bat` để tắt và
+`Sao_Luu_Du_Lieu.bat` để sao lưu. Lần đầu cần Docker Desktop/WSL 2 và Internet.
+
 ## 🚀 Khởi chạy nhanh
 
 ### Trên Windows
@@ -12,8 +20,8 @@ Chay_He_Thong.bat
 
 ### Chạy thủ công bằng Docker
 ```bash
-# Khởi chạy hệ thống bằng Docker Compose
-docker-compose up --build -d
+# Sau khi Chay_Docker.bat đã tạo .env
+docker compose up --build -d --wait --wait-timeout 1800
 
 # Truy cập trình duyệt
 http://localhost:3000/dang-nhap.html
@@ -76,13 +84,12 @@ Hệ thống sẽ tự động:
 Mặc định, backend sẽ dùng dữ liệu giả lập (Simulator). Để hệ thống nhận diện âm thanh thực tế thông qua mô hình AI, bạn cần chạy AI Server (Python):
 
 ### Cách 1: Chạy bằng Docker (Khuyên dùng)
-1. Mở file `docker-compose.yml`
-2. Tìm khối cấu hình `ai-service` và xóa dấu `#` (uncomment)
-3. Chạy lại lệnh:
+AI service đã được bật sẵn trong Docker Compose và có cache model lâu dài.
+Khởi chạy bằng script hoặc lệnh:
    ```bash
-   docker-compose up --build -d
+   docker compose up --build -d --wait --wait-timeout 1800
    ```
-Hệ thống AI sẽ chạy ở cổng `5000` và kết nối trực tiếp với Backend.
+AI chạy cổng `5000` trong mạng Docker, backend tự kết nối; chỉ cần mở web cổng `3000`.
 
 ### Cách 2: Chạy thủ công (không dùng Docker)
 Nếu bạn muốn chạy server AI để tiện debug và test âm thanh:

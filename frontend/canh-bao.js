@@ -53,13 +53,16 @@
       
       const data = await res.json();
       const count = data.total_alerts ?? data.totalAlerts ?? 0;
+      document.getElementById('dialog-modal-body').innerHTML = renderAnalysisReport(data.result || data);
+      document.getElementById('dialog-modal').style.display = 'flex';
 
       if (count > 0) {
         showToast('🚨 Phân tích hoàn tất', `Tìm thấy ${count} cảnh báo trong file âm thanh!`, 'danger');
         // Reload danh sách để hiện các cảnh báo mới
         await loadAlerts();
       } else {
-        showToast('✅ Phân tích hoàn tất', 'Không phát hiện dấu hiệu bạo lực trong file âm thanh.', 'success');
+        const analysis=(data.result || data).analysis;
+        showToast('Phân tích hoàn tất', analysis?.summary || 'Xem nội dung lời nói và kết quả phân tích.', 'info');
       }
 
       event.target.value = '';
@@ -160,18 +163,14 @@
       
       return `${icon} ${text}`;
     }
-      const confidence = Math.max(10, Math.min(95, Number(a.confidence_score) || 10));
-      const confidenceLabel = getConfidenceLabel(confidence);
       const statusObj = STATUS_LABELS[a.status] || { class: 'badge-warning', label: a.status || 'Chờ xử lý' };
       return `
-      <div class="alert-card ${getSeverityClass(a.confidence_score)}" id="alert-${a.id}">
+      <div class="alert-card ${a.risk_level === 'high' ? 'severity-high' : 'severity-medium'}" id="alert-${a.id}">
 
         <div class="alert-card-header">
           <span class="alert-card-type">
             ${type.icon} ${type.label}
-            <span class="confidence-bar"><span class="confidence-bar-fill" style="width:${confidence}%;background:${getConfidenceColor(confidence)}"></span></span>
-            <strong>${confidence.toFixed(0)}%</strong>
-            <small style="font-weight:600;color:${getConfidenceColor(confidence)}">${confidenceLabel}</small>
+            <strong>Nguy cơ: ${riskLabel(a)}</strong>
           </span>
           <span class="badge ${statusObj.class}">${statusObj.label}</span>
         </div>
@@ -218,83 +217,7 @@
 
     try {
       const alertData = await api('GET', `/api/alerts/${alertId}`);
-      const dialogDataObj = alertData.dialog_data;
-
-      // dialog_data là object: { dialogue: [...], violence_probability, ... }
-      // hoặc dialog_data chính là mảng (fallback)
-      const dialogue = Array.isArray(dialogDataObj)
-        ? dialogDataObj
-        : (dialogDataObj?.dialogue ?? []);
-
-      const prob = dialogDataObj?.violence_probability ?? null;
-      const scream = dialogDataObj?.has_scream ?? false;
-      const crying = dialogDataObj?.has_crying ?? false;
-      const threats = dialogDataObj?.threats_count ?? 0;
-      const vulgarity = dialogDataObj?.vulgarity_count ?? 0;
-      const emergency = dialogDataObj?.emergency_count ?? 0;
-
-      let statsHtml = '';
-      if (prob !== null) {
-        const probColor = prob >= 70 ? 'var(--danger)' : prob >= 40 ? '#f59e0b' : '#10b981';
-        statsHtml = `<div style="display:flex;gap:16px;flex-wrap:wrap;padding:12px 16px;background:rgba(239,68,68,0.07);border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:600;">
-          <span><i class="bi bi-exclamation-triangle-fill" style="color:${probColor}"></i> Tỉ lệ bạo lực: <strong style="color:${probColor};font-size:16px">${prob.toFixed(0)}%</strong></span>
-          ${scream ? '<span><i class="bi bi-volume-up-fill text-danger"></i> Có tiếng gào thét</span>' : ''}
-          ${crying ? '<span><i class="bi bi-emoji-tear-fill text-warning"></i> Có tiếng khóc lóc</span>' : ''}
-          ${dialogDataObj?.has_impact ? '<span><i class="bi bi-hammer text-danger"></i> Có tiếng đập phá</span>' : ''}
-          ${emergency > 0 ? `<span><i class="bi bi-person-arms-up text-danger"></i> Kêu cứu / Van xin: ${emergency}</span>` : ''}
-          ${threats > 0 ? `<span><i class="bi bi-shield-x-fill text-danger"></i> Lời đe dọa: ${threats}</span>` : ''}
-          ${vulgarity > 0 ? `<span><i class="bi bi-chat-x-fill text-warning"></i> Chửi thề: ${vulgarity}</span>` : ''}
-        </div>`;
-      }
-
-      const origUrl = dialogDataObj?.original_audio_url;
-      const clipUrl = alertData.audio_file_url;
-
-      let audioPlayersHtml = `
-        <div style="background:var(--bg-secondary, #f8fafc);border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-          <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:10px;"><i class="bi bi-file-earmark-play-fill text-danger"></i> Tệp âm thanh liên quan:</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:12px;">
-            ${clipUrl ? `
-            <div style="background:#fff;border:1px solid #fee2e2;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
-              <div style="font-weight:600;font-size:12px;color:var(--danger);margin-bottom:4px;"><i class="bi bi-scissors"></i> Đoạn cắt cảnh báo 10s:</div>
-              <audio controls style="width:100%;height:32px;"><source src="${clipUrl}${clipUrl.includes('?') ? '&' : '?'}v=${Date.now()}">Trình duyệt không hỗ trợ</audio>
-            </div>` : ''}
-            ${origUrl ? `
-            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
-              <div style="font-weight:600;font-size:12px;color:#2563eb;margin-bottom:4px;"><i class="bi bi-soundwave"></i> Toàn bộ file âm thanh:</div>
-              <audio controls style="width:100%;height:32px;"><source src="${origUrl}${origUrl.includes('?') ? '&' : '?'}v=${Date.now()}">Trình duyệt không hỗ trợ</audio>
-            </div>` : ''}
-          </div>
-        </div>`;
-
-      if (dialogue.length === 0) {
-        modalBody.innerHTML = `
-          ${statsHtml}
-          <div style="background:rgba(239,68,68,0.04);border:1.5px dashed rgba(239,68,68,0.3);border-radius:10px;padding:24px;text-align:center;margin:12px 0;">
-            <i class="bi bi-mic-mute-fill" style="font-size:36px;color:var(--text-secondary);"></i>
-            <div style="font-weight:700;font-size:15px;color:var(--text);margin-top:8px;">Không có lời thoại</div>
-            <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">
-              Hệ thống nhận diện sự kiện âm thanh (tiếng đập phá hoặc tiếng khóc), không phát hiện lời nói.
-            </div>
-          </div>
-          ${audioPlayersHtml}
-        `;
-        return;
-      }
-
-      const html = dialogue.map(d => {
-        const isAI = (d.speaker || '').toLowerCase() === 'ai';
-        const bg = isAI ? 'rgba(239,68,68,0.07)' : 'rgba(0,0,0,0.03)';
-        const borderColor = isAI ? 'var(--danger)' : '#d1d5db';
-        const ts = escapeHTML(d.timestamp_s ?? d.time ?? d.timestamp ?? '?');
-        return `<div style="background:${bg};border-left:3px solid ${borderColor};padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:10px;font-size:14px;">
-          <span style="font-size:11px;color:var(--text-secondary);font-weight:600;">[Giây ${ts}]</span>
-          <strong style="color:${isAI ? 'var(--danger)' : 'var(--text)'}"> ${escapeHTML(d.speaker ?? 'Unknown')}:</strong>
-          <span style="color:var(--text)"> ${escapeHTML(d.text ?? '')}</span>
-        </div>`;
-      }).join('');
-
-      modalBody.innerHTML = statsHtml + audioPlayersHtml + html;
+      modalBody.innerHTML = renderAnalysisReport(alertData.dialog_data);
     } catch (err) {
       modalBody.innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)"><i class="bi bi-exclamation-triangle" style="font-size:32px"></i><p style="margin-top:12px">Lỗi tải dữ liệu: ${err.message}</p></div>`;
     }

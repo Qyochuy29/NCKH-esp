@@ -96,14 +96,14 @@
     const type = SOUND_TYPE_LABELS[a.sound_type] || { icon: '<i class="bi bi-question-circle"></i>', label: a.sound_type, color: 'info' };
     const status = STATUS_LABELS[a.status] || { label: a.status, class: 'badge-muted' };
     return `
-      <div class="alert-card ${getSeverityClass(a.confidence_score)}" style="padding:12px 16px;margin-bottom:8px;">
+      <div class="alert-card ${a.risk_level === 'high' ? 'severity-high' : 'severity-medium'}" style="padding:12px 16px;margin-bottom:8px;">
         <div class="alert-card-header" style="margin-bottom:4px;">
           <span class="alert-card-type">${type.icon} ${type.label}</span>
           <span class="badge ${status.class}">${status.label}</span>
         </div>
         <div class="alert-card-meta" style="margin-bottom: 8px;">
           <span><i class="bi bi-geo-alt"></i> ${escapeHTML(a.device?.area?.name || a.device?.area || '?')}</span>
-          <span><i class="bi bi-bullseye"></i> ${a.confidence_score.toFixed(0)}%</span>
+          <span><i class="bi bi-bullseye"></i> ${riskLabel(a)}</span>
           <span><i class="bi bi-clock"></i> ${formatRelative(a.timestamp)}</span>
         </div>
         ${a.audio_file_url ? `<div style="margin-top: 8px;"><audio controls preload="none" style="height:32px; width: 100%;"><source src="${a.audio_file_url}">Trình duyệt không hỗ trợ</audio></div>` : ''}

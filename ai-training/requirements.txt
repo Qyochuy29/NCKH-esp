@@ -1,9 +1,11 @@
 Flask==3.0.3
 numpy==1.26.4
-tensorflow-cpu==2.16.2
+tensorflow==2.16.2
+tf-keras==2.16.0
 tensorflow-hub==0.16.1
 librosa==0.10.2
 pydub==0.25.1
 SpeechRecognition==3.10.4
 faster-whisper>=1.2.1,<2
 groq>=0.11.0
+gunicorn==23.0.0

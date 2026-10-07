@@ -34,12 +34,11 @@ HALLUCINATION_PHRASES = (
     "video tiếp theo",
     "hãy đăng ký",
     "kênh lợi",
-    "tự nhiên",
 )
 
 # Prompt ngắn gọn, chỉ cung cấp ngữ cảnh trường học — KHÔNG liệt kê từ vựng cụ thể
 # vì liệt kê từ ngữ vào prompt khiến Whisper "ảo giác" copy lại đúng những từ đó vào kết quả!
-VIETNAMESE_PROMPT = "Cuộc trò chuyện tại trường học Việt Nam, học sinh nói chuyện với nhau, tiếng Việt khẩu ngữ tự nhiên."
+VIETNAMESE_PROMPT = "Lời nói tiếng Việt."
 
 DEFAULT_PROFANITY_WORDS = [
     # Cụm dài (match ưu tiên trước)
@@ -238,200 +237,14 @@ STANDALONE_PROFANITY_TOKENS = {
     'ml', 'cức', 'cứt',
 }
 
-PHONETIC_WORD_MAP = {
-    'lôn': 'lồn',
-    'lồz': 'lồn',
-    'loz': 'lồn',
-    'đit': 'địt',
-    'đjt': 'địt',
-    'dit': 'địt',
-    'djt': 'địt',
-    'mịt': 'địt',
-    'mít': 'địt',
-    'buoi': 'buồi',
-    'bùi': 'buồi',
-    'buôi': 'buồi',
-    'buổi': 'buồi',
-    'bổi': 'buồi',
-    'kặc': 'cặc',
-    'cac': 'cặc',
-    'cặt': 'cặc',
-    'mồn': 'mồm',
-    'nhợn': 'nhờn',
-    'nhớt': 'nhờn',
-    'bỡi': 'vỡ',
-}
-
-PHONETIC_REGEX_FIXES = [
-    # =====================================================================
-    # NHÓM 1: TỪ TỤC / CHỬI BỚI - Sửa lỗi nhầm âm phổ biến
-    # =====================================================================
-    (r'(?i)\b(cái\s+)?mịt\s+con\s+mẹ\b', r'\1địt con mẹ'),
-    (r'(?i)\bmịt\s+mẹ\b', 'địt mẹ'),
-    (r'(?i)\bmịt\s+cụ\b', 'địt cụ'),
-    (r'(?i)\bmình\s+còn\s+mẹ\s+à\s+mày\b', 'địt con mẹ mày'),
-    (r'(?i)\bđit\b', 'địt'),
-    (r'(?i)\bđjt\b', 'địt'),
-    (r'(?i)\btuổi\s+lôn\s+(xánh|xảnh|sánh)\s+(mày|bay|vai)\b', 'tuổi lồn sánh vai'),
-    (r'(?i)\btuổi\s+lôn\b', 'tuổi lồn'),
-    (r'(?i)\bmặt\s+lôn\b', 'mặt lồn'),
-    (r'(?i)\bhãm\s+lôn\b', 'hãm lồn'),
-    (r'(?i)\bláo\s+lôn\b', 'láo lồn'),
-    (r'(?i)\bcon\s+lôn\b', 'con lồn'),
-    (r'(?i)\bthằng\s+lôn\b', 'thằng lồn'),
-    (r'(?i)\bbố\s+mày\s+(nhợn|nhớt|nhận)\s+với\s+mày\b', 'bố mày nhờn với mày'),
-    (r'(?i)\bnhợn\s+với\s+(tao|bố)\b', r'nhờn với \1'),
-    (r'(?i)\b(đồ|con|loại|phật)\s+su\s+vật\b', r'đồ súc vật'),
-    (r'(?i)\b(một|mùa)\s+xíu\s+vật\b', 'đồ súc vật'),
-    (r'(?i)\btao\s+(lại|lạy)\s+(máy|mậy)\b', 'tao lạy mày'),
-    (r'(?i)\bđánh\s+bỡi\b', 'đánh vỡ mồm'),
-    (r'(?i)\bcầm\s+mẹ\s+cái\s+mồn\b', 'câm mẹ cái mồm'),
-    (r'(?i)\bvới\s+mồn\s+mày\b', 'vỡ mồm mày'),
-    (r'(?i)\bvới\s+mồm\s+mày\b', 'vỡ mồm mày'),
-    (r'(?i)\bcận\s+dịch\b', 'cần cặc'),
-    (r'(?i)\bđau\s+bùi\b', 'đầu buồi'),
-    (r'(?i)\blắm\s+bùi\b', 'lắm buồi'),
-    (r'(?i)\bbuổi\s+(nha|lắm|như|mày)\b', r'buồi \1'),
-    (r'(?i)\bcủa\s+tổ\s+này\b', 'cả lò nhà mày'),
-    (r'(?i)\btrao\s+hỏi\b', 'chào hỏi'),
-    (r'(?i)\bcần\s+(dịnh|dịch)\b', 'cần cặc'),
-    (r'(?i)\bđịt\s+con\s+(mê|mẹ\s+mà)\b', 'địt con mẹ'),
-
-    # =====================================================================
-    # NHÓM 2: ĐE DỌA / BẮT NẠT HỌC ĐƯỜNG - Whisper nghe nhầm
-    # =====================================================================
-    # "đánh mày / đập mày" - Whisper hay nghe thành "anh mày", "đạn mày"
-    (r'(?i)\banh\s+mày\b(?!\s+ơi)', 'đánh mày'),          # "anh mày" → "đánh mày" (trừ "anh mày ơi")
-    (r'(?i)\bđạn\s+mày\b', 'đánh mày'),
-    (r'(?i)\băn\s+đây\s+chưa\b', 'ăn đấm chưa'),
-    (r'(?i)\băn\s+đây\s+không\b', 'ăn đấm không'),
-    (r'(?i)\băn\s+đầm\b', 'ăn đấm'),
-    # "bắt nạt" - phổ biến trong học đường
-    (r'(?i)\bbắc\s+nạt\b', 'bắt nạt'),
-    (r'(?i)\bbắt\s+nhạt\b', 'bắt nạt'),
-    (r'(?i)\bbắt\s+nặt\b', 'bắt nạt'),
-    # "tao còn chưa sợ" / "tao không sợ mày"
-    (r'(?i)\btao\s+con\s+chưa\s+sợ\b', 'tao còn chưa sợ'),
-    (r'(?i)\btao\s+không\s+sợ\s+(mày|bay)\b', 'tao không sợ mày'),
-    # "ngon thì ra đây"
-    (r'(?i)\bngon\s+thì\s+ra\s+đây\b', 'ngon thì ra đây'),
-    (r'(?i)\bngon\s+(thì|thời)\s+nhào\s+vô\b', 'ngon thì nhào vô'),
-    (r'(?i)\bngon\s+không\s+(thì|thời)\b', 'ngon không thì'),
-    # "xem mày làm được gì"
-    (r'(?i)\bxem\s+(mày|bay)\s+làm\s+được\s+gì\b', 'xem mày làm được gì'),
-    # "mày tưởng mày ngon"
-    (r'(?i)\b(mày|bay)\s+tưởng\s+(mày|bay)\s+ngon\b', 'mày tưởng mày ngon'),
-    # "liệu hồn" / "coi chừng"
-    (r'(?i)\bliệu\s+hồng\b', 'liệu hồn'),
-    (r''r'(?i)\bcoi\s+chừn\b', 'coi chừng'),
-
-    # =====================================================================
-    # NHÓM 3: VAN XIN / KÊU CỨU - Whisper nghe nhầm
-    # =====================================================================
-    (r'(?i)\btha\s+cho\s+(em|anh|chị|con|cháu|mình|tôi|tao)\s+đi\b', r'tha cho \1 đi'),
-    (r'(?i)\btha\s+cho\s+(em|anh|chị|con|cháu|mình|tôi|tao)\s+lần\s+này\b', r'tha cho \1 lần này'),
-    # "em xin" hay bị nghe thành "anh xin" hoặc "em sin"
-    (r'(?i)\bem\s+sin\b', 'em xin'),
-    (r'(?i)\bem\s+xin\s+(anh|chị)\s+đó\b', r'em xin \1 đó'),
-    # "đừng đánh em" hay bị Whisper nói thành "đừng đánh em ơi" hoặc "đừng đần em"
-    (r'(?i)\bđừng\s+đần\s+(em|con|mình)\b', r'đừng đánh \1'),
-    (r'(?i)\bđừng\s+đâm\s+(em|con|mình)\b', r'đừng đánh \1'),
-    # "em đau rồi / em đau lắm"
-    (r'(?i)\bem\s+đao\s+rồi\b', 'em đau rồi'),
-    (r'(?i)\bem\s+đao\s+lắm\b', 'em đau lắm'),
-    (r'(?i)\bem\s+đao\s+quá\b', 'em đau quá'),
-    (r'(?i)\bem\s+đao\b', 'em đau'),
-    # "cứu tôi với / cứu em với"
-    (r'(?i)\bcứu\s+(tôi|em|con|cháu)\s+với\b', r'cứu \1 với'),
-    (r'(?i)\bcứu\s+(tôi|em|con|cháu)\s+vời\b', r'cứu \1 với'),
-
-    # =====================================================================
-    # NHÓM 4: TỪ TRƯỜNG HỌC - Whisper hay nhầm
-    # =====================================================================
-    # Số lớp học - Whisper dùng chữ số chữ thay vì số
-    (r'(?i)\blớm\s+mở\b', 'từ lớp'),              # "lớm mở" → "từ lớp" (lỗi phổ biến nhất)
-    (r'(?i)\blớm\s+một\b', 'lớp 1'),
-    (r'(?i)\blớm\s+hai\b', 'lớp 2'),
-    (r'(?i)\blớm\s+ba\b', 'lớp 3'),
-    (r'(?i)\blớm\s+bốn\b', 'lớp 4'),
-    (r'(?i)\blớm\s+năm\b', 'lớp 5'),
-    (r'(?i)\blớp\s+một\b', 'lớp 1'),
-    (r'(?i)\blớp\s+hai\b', 'lớp 2'),
-    (r'(?i)\blớp\s+ba\b', 'lớp 3'),
-    (r'(?i)\blớp\s+bốn\b', 'lớp 4'),
-    (r'(?i)\blớp\s+năm\b', 'lớp 5'),
-    (r'(?i)\blớp\s+sáu\b', 'lớp 6'),
-    (r'(?i)\blớp\s+bảy\b', 'lớp 7'),
-    (r'(?i)\blớp\s+tám\b', 'lớp 8'),
-    (r'(?i)\blớp\s+chín\b', 'lớp 9'),
-    (r'(?i)\blớp\s+mười\s+một\b', 'lớp 11'),      # 11 trước 10 để tránh match nhầm
-    (r'(?i)\blớp\s+mười\s+hai\b', 'lớp 12'),
-    (r'(?i)\blớp\s+mười\b', 'lớp 10'),
-    # "thầy / cô / hiệu trưởng"
-    (r'(?i)\bthầy\s+giáo\b', 'thầy giáo'),
-    (r'(?i)\bcô\s+giáo\b', 'cô giáo'),
-    (r'(?i)\bhiệu\s+trưởng\b', 'hiệu trưởng'),
-    (r'(?i)\bhiệu\s+trường\b', 'hiệu trưởng'),     # Whisper hay nói "trường" thay "trưởng"
-    (r'(?i)\bgiám\s+thị\b', 'giám thị'),
-    (r'(?i)\bgiám\s+thi\b', 'giám thị'),
-    # "chơi nhau" vs "chửi nhau" vs "đánh nhau"
-    (r'(?i)\bchơi\s+nhau\s+không\b', 'đánh nhau không'),  # trong ngữ cảnh học đường
-    # Tên các môn học (Whisper hay sai)
-    (r'(?i)\btoán\s+học\b', 'toán học'),
-    (r'(?i)\bvăn\s+học\b', 'văn học'),
-
-    # =====================================================================
-    # NHÓM 5: KHẨU NGỮ MIỀN NAM / MIỀN BẮC - Whisper hay nhầm lẫn
-    # =====================================================================
-    # "mày" hay bị nghe thành "bay", "máy", "mày"
-    (r'(?i)\b(tao|tôi)\s+bay\b(?!\s+\w)', r'\1 mày'),    # "tao bay" → "tao mày" (không phải "bay đi")
-    # "tao" hay bị nghe thành "dao", "đao", "thao"
-    (r'(?i)\bđao\s+(đây|không|mà|thôi|nhé|nha)\b', r'tao \1'),
-    (r'(?i)\bthao\s+(đây|không|mà|thôi|nhé|nha|ơi)\b', r'tao \1'),
-    # "nó" hay bị nghe thành "ngó", "no"
-    (r'(?i)\bngó\s+(không|đó|đây|kia|đánh|chạy)\b', r'nó \1'),
-    # Tiếng miền Nam: "vậy" → Whisper hay nghe thành "vậy", "bậy"
-    (r'(?i)\bbậy\s+là\b', 'vậy là'),
-    (r'(?i)\bsao\s+bậy\b', 'sao vậy'),
-    (r'(?i)\bchứ\s+bộ\b', 'chứ bộ'),             # Khẩu ngữ Nam: "chứ bộ" = "chứ gì nữa"
-    # "ông/bà nội" = cách xưng hô thách thức ở miền Nam
-    (r'(?i)\bông\s+nội\s+(mày|bay)\b', 'ông nội mày'),
-    (r'(?i)\bbà\s+nội\s+(mày|bay)\b', 'bà nội mày'),
-
-    # =====================================================================
-    # NHÓM 6: LỖI NHỎ THƯỜNG GẶP CỦA WHISPER SMALL VỚI TIẾNG VIỆT
-    # =====================================================================
-    # "quay lại" hay bị nghe thành "quai lại", "quây lại"
-    (r'(?i)\bquai\s+lại\b', 'quay lại'),
-    (r'(?i)\bquây\s+lại\b', 'quay lại'),
-    # "ra đây" hay bị nghe thành "ra đấy", "ra đày"
-    (r'(?i)\bra\s+đày\b', 'ra đây'),
-    # "đứng lại" → "đứn lại"
-    (r'(?i)\bđứn\s+lại\b', 'đứng lại'),
-    # "chạy đi" → "chạy đy", "chạy đi" (thường đúng)
-    (r'(?i)\bchạy\s+đy\b', 'chạy đi'),
-    # Tiếng rên / kêu đau - chuẩn hóa
-    (r'(?i)\bới\s+ời\b', 'ơi'),
-    (r'(?i)\bẩy\s*[!?.]*\s+(?=\bẩy\b)', 'ấy '),  # "ẩy" → "ấy"
-    (r'(?i)\bôi\s+dào\b', 'ôi trời'),
-    (r'(?i)\btrời\s+đát\b', 'trời đất'),
-    (r'(?i)\btrời\s+ơi\s+đất\s+hỡi\b', 'trời ơi đất hỡi'),
-    # Xưng hô đặc trưng học đường
-    (r'(?i)\bthằng\s+đó\b', 'thằng đó'),
-    (r'(?i)\bcon\s+đó\b', 'con đó'),
-    # Lỗi dấu hỏi/ngã hay gặp
-    (r'(?i)\bthậm\s+chí\b', 'thậm chí'),
-    (r'(?i)\bkhỏe\s+không\b', 'khỏe không'),
-]
-
+# No phonetic substitution may manufacture threats/profanity from ordinary words.
+PHONETIC_WORD_MAP = {}
+PHONETIC_REGEX_FIXES = []
 
 
 def correct_vietnamese_transcription(text: str) -> str:
-    """Correct common Whisper Vietnamese mis-transcriptions for slang and curses."""
-    text = unicodedata.normalize("NFC", text or "").strip()
-    for pat, rep in PHONETIC_REGEX_FIXES:
-        text = re.sub(pat, rep, text)
-    return text
+    """Unicode/whitespace only. Never reinterpret the meaning of an ASR result."""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", text or "")).strip()
 
 
 def get_whisper_waveform(audio_segment: AudioSegment) -> np.ndarray:
@@ -542,226 +355,184 @@ def deduplicate_consecutive_phrases(text: str) -> str:
     return re.sub(r'\b(\w+)(?:\s+\1){2,}\b', r'\1', collapsed, flags=re.UNICODE)
 
 
-def transcribe_vietnamese(model, audio_segment: AudioSegment, vad_filter: bool = True):
-    """Return (text, accepted words, accepted segments, confidence_percent)."""
-    waveform = get_whisper_waveform(audio_segment)
-    if waveform.size == 0:
-        return "", [], [], 0.0
+def _field(value, name, default=None):
+    return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
 
-    # VAD tuned to preserve shouting, swearing, crying, and natural schoolyard dialogue
-    vad_params = {
-        "threshold": 0.30,
-        "min_speech_duration_ms": 150,
-        "min_silence_duration_ms": 400,
-        "speech_pad_ms": 500,
-    }
 
-    def _run_transcribe(use_vad: bool, temperature=0.0):
-        return model.transcribe(
-            waveform,
-            language="vi",
-            task="transcribe",
-            beam_size=8,             # Tăng từ 5 → 8: tìm kiếm rộng hơn, đặc biệt cho câu ngắn
-            best_of=5,
-            patience=1.2,
-            temperature=temperature,
-            word_timestamps=True,
-            vad_filter=use_vad,
-            vad_parameters=vad_params if use_vad else None,
-            condition_on_previous_text=False,
-            no_speech_threshold=0.65,    # Tăng nhẹ: bỏ qua đoạn không có giọng nói rõ hơn
-            log_prob_threshold=-1.8,     # Chặt hơn: loại bỏ ảo giác có độ tin thấp
-            compression_ratio_threshold=2.4,
-            repetition_penalty=1.4,      # Tăng mạnh: ngăn vòng lặp "Ấy! Ấy! Ấy!"
-            hallucination_silence_threshold=1.5,
-            initial_prompt=VIETNAMESE_PROMPT,
-        )
-
-    segments_gen, _ = _run_transcribe(vad_filter, temperature=0.0)
-    raw_segments = list(segments_gen)
-
-    # Nếu bật vad_filter mà không thu được segment hợp lệ nào (rất phổ biến khi nạn nhân bị đánh đập, khóc nấc, rên rỉ, van xin bị VAD chặn nhầm)
-    # -> Fallback ngay lập tức sang chạy không dùng VAD để không bỏ sót tiếng van xin / kêu cứu của nạn nhân!
-    if vad_filter and (not raw_segments or not any(_accept_segment(s) for s in raw_segments)):
-        segments_gen, _ = _run_transcribe(False, temperature=0.0)
-        raw_segments = list(segments_gen)
-
-    # Nếu kết quả có độ tin thấp (avg_logprob < -1.2) → thử lại với temperature=0.2 để decoder thử hướng khác
-    all_accepted = [s for s in raw_segments if _accept_segment(s)]
-    if all_accepted:
-        avg_lp = sum(getattr(s, 'avg_logprob', 0.0) for s in all_accepted) / len(all_accepted)
-        if avg_lp < -1.2:
-            segments_gen2, _ = _run_transcribe(vad_filter, temperature=0.2)
-            raw_segments2 = list(segments_gen2)
-            all_accepted2 = [s for s in raw_segments2 if _accept_segment(s)]
-            if all_accepted2:
-                avg_lp2 = sum(getattr(s, 'avg_logprob', 0.0) for s in all_accepted2) / len(all_accepted2)
-                if avg_lp2 > avg_lp + 0.15:  # Chỉ dùng kết quả mới nếu tốt hơn rõ ràng
-                    raw_segments = raw_segments2
-
-    accepted_segments = []
-    words = []
-    texts = []
-    probabilities = []
-    for segment in raw_segments:
-        if not _accept_segment(segment):
+def _asr_result(raw_segments, raw_text, provider, model_name, words=None):
+    segments = []
+    warnings = []
+    for index, seg in enumerate(raw_segments):
+        text = _field(seg, "text", "") or ""
+        try:
+            start, end = float(_field(seg, "start")), float(_field(seg, "end"))
+        except (ValueError, TypeError):
+            warnings.append("ASR segment has no valid timestamps; raw text retained for audit")
             continue
+        if not (math.isfinite(start) and math.isfinite(end) and end >= start >= 0):
+            warnings.append("ASR segment has invalid timestamps; raw text retained for audit")
+            continue
+        lp = _field(seg, "avg_logprob")
+        ns = _field(seg, "no_speech_prob")
+        accepted = bool(text.strip()) and not (
+            ns is not None and float(ns) > 0.85 or lp is not None and float(lp) < -2.2)
+        if text.strip() and not accepted:
+            warnings.append("A speech segment was excluded because ASR quality was insufficient")
+        if is_hallucination(text):
+            # A decoder can be confidently wrong. Flag for review even when its
+            # native log probability is high; do not erase a genuine quoted ad.
+            warnings.append("Stereotyped subscription/outro text requires verification against original audio")
+        # Retain the raw ASR output, but exclude weak, stereotyped decoder hallucinations.
+        if is_hallucination(text) and (ns is not None and float(ns) > .3 or lp is not None and float(lp) < -.7):
+            accepted = False
+            warnings.append("Possible ASR hallucination retained in raw transcript; excluded from evidence")
+        segments.append({"start": start, "end": end, "text": correct_vietnamese_transcription(text),
+                         "raw_text": text, "accepted": accepted,
+                         "avg_logprob": lp, "no_speech_prob": ns})
+    segments.sort(key=lambda seg: (seg["start"], seg["end"]))
+    normalized = correct_vietnamese_transcription(raw_text)
+    accepted = [seg for seg in segments if seg["accepted"]]
+    # Quality is a routing signal, not an accuracy or violence probability.
+    quality = "usable" if accepted else "no_speech"
+    if warnings or (raw_text.strip() and not accepted) or any(seg["avg_logprob"] is not None and float(seg["avg_logprob"]) < -1.0 for seg in accepted):
+        quality = "review"
+    return {"provider": provider, "model": model_name, "has_speech": bool(accepted),
+            "raw_transcript": raw_text, "normalized_transcript": normalized,
+            "segments": segments, "words": words or [], "quality": quality,
+            "status": "success", "warnings": warnings}
 
-        # Correct phonetic mishearings and deduplicate any decoder latching loops
-        corrected_text = correct_vietnamese_transcription(segment.text)
-        corrected_text = deduplicate_consecutive_phrases(corrected_text)
-        segment.text = corrected_text
 
-        text = _normalized_text(corrected_text)
-        texts.append(text)
-        accepted_segments.append(segment)
+def transcribe_local(model, audio_segment, vad_filter=True, speech_expected=True):
+    if model is None:
+        raise RuntimeError("Local ASR model is unavailable")
+    waveform = get_whisper_waveform(audio_segment)
+    model_name = os.environ.get("WHISPER_MODEL_SIZE", "medium")
+    if waveform.size == 0 or float(np.max(np.abs(waveform))) < 1e-6:
+        return _asr_result([], "", "faster-whisper", model_name)
+    options = dict(language="vi", task="transcribe", beam_size=5,
+                   temperature=0.0, word_timestamps=True,
+                   condition_on_previous_text=False)
+    # Short, acoustically confirmed speech benefits from full decoding: VAD was
+    # deleting insults in the user's clip. Long recordings still use VAD.
+    if speech_expected and len(audio_segment)<=30000:
+        vad_filter=False
+    decoded, info = model.transcribe(waveform, vad_filter=vad_filter,
+                                    vad_parameters={"threshold": 0.3, "min_silence_duration_ms": 400,
+                                                    "speech_pad_ms": 400} if vad_filter else None, **options)
+    raw_segments = list(decoded)
+    # Do not force a transcript from music/impacts when VAD found no speech.
+    if not raw_segments and vad_filter and speech_expected:
+        decoded, info = model.transcribe(waveform, vad_filter=False, **options)
+        raw_segments = list(decoded)
+    words = [{"start": float(w.start), "end": float(w.end), "word": w.word,
+              "probability": getattr(w, "probability", None)}
+             for seg in raw_segments for w in (getattr(seg, "words", None) or [])]
+    result = _asr_result(raw_segments, "".join(seg.text for seg in raw_segments),
+                         "faster-whisper", model_name, words)
+    if raw_segments and any(is_hallucination(seg.text) for seg in raw_segments):
+        # Retry once without prompting/VAD conditioning. No profanity or threat
+        # vocabulary is supplied to the decoder, and the first output is audited.
+        retry_options = dict(options)
+        retry_options.pop('initial_prompt', None)
+        try:
+            retried, _ = model.transcribe(waveform, vad_filter=False if speech_expected else vad_filter,
+                                          **retry_options)
+            retry_segments = list(retried)
+            retry_words = [{"start":float(w.start),"end":float(w.end),"word":w.word,
+                            "probability":getattr(w,"probability",None)}
+                           for seg in retry_segments for w in (getattr(seg,'words',None) or [])]
+            retry = _asr_result(retry_segments, ''.join(seg.text for seg in retry_segments),
+                                'faster-whisper',model_name,retry_words)
+            result['decoder_retry'] = {'initial_raw_transcript':result['raw_transcript'],
+                                      'retry_raw_transcript':retry['raw_transcript']}
+            if retry['has_speech'] and retry['quality']=='usable':
+                retry['decoder_retry']=result['decoder_retry']
+                return retry
+        except Exception as exc:
+            result['warnings'].append(f'Unprompted ASR retry failed: {exc}')
+    return result
 
-        seg_words = getattr(segment, "words", None) or []
-        for w in seg_words:
-            w.word = correct_vietnamese_transcription(getattr(w, "word", ""))
-        words.extend(seg_words)
-        probabilities.append(math.exp(min(0.0, float(segment.avg_logprob))))
 
-    raw_transcript = " ".join(texts).strip()
-    transcript = deduplicate_consecutive_phrases(raw_transcript)
-    if is_hallucination(transcript):
-        return "", [], [], 0.0
-    confidence = round(100.0 * sum(probabilities) / len(probabilities), 1) if probabilities else 0.0
-    return transcript, words, accepted_segments, confidence
-
-
-def transcribe_vietnamese_groq(audio_segment: AudioSegment) -> tuple[str, list, list, float]:
-    """Bóc băng tiếng Việt bằng Groq API (Whisper large-v3) — chính xác hơn model local.
-    
-    Trả về (transcript, words, segments_dummy, confidence) — cùng interface với transcribe_vietnamese.
-    Nếu không có API key hoặc lỗi mạng → trả về ('', [], [], 0.0) để caller fallback local.
-    """
+def transcribe_cloud(audio_segment):
     import io
-    import logging
-    
+    from groq import Groq
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
-        return "", [], [], 0.0
-
-    try:
-        from groq import Groq
-        client = Groq(api_key=api_key, timeout=15.0)
-
-        # Xuất audio ra bytes WAV để gửi lên API
-        buf = io.BytesIO()
-        audio_16k = audio_segment.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-        audio_16k.export(buf, format="wav")
-        buf.seek(0)
-        wav_bytes = buf.read()
-
-        result = client.audio.transcriptions.create(
-            file=("audio.wav", wav_bytes, "audio/wav"),
-            model="whisper-large-v3-turbo",   # Nhanh hơn large-v3 mà vẫn rất chính xác
-            language="vi",
-            response_format="verbose_json",    # Trả về timestamp + confidence
-            timestamp_granularities=["word", "segment"] # Yêu cầu trả về timestamps từng từ
-        )
-
-        # Lấy transcript và áp dụng sửa lỗi phonetic giống local
-        raw_text = getattr(result, "text", "") or ""
-        raw_text = correct_vietnamese_transcription(raw_text)
-        raw_text = deduplicate_consecutive_phrases(raw_text)
-        transcript = _normalized_text(raw_text)
-
-        # Groq trả về segments với timestamps
-        groq_segments = getattr(result, "segments", []) or []
-        confidence = 0.0
-        if groq_segments:
-            # avg_logprob không có trong Groq response → dùng 0.85 mặc định (large-v3 rất tốt)
-            confidence = 85.0
-
-        # Tạo dummy segments để tương thích với code hiện tại
-        class _DummySeg:
-            def __init__(self, s):
-                if isinstance(s, dict):
-                    self.start = float(s.get("start", 0.0))
-                    self.end = float(s.get("end", 0.0))
-                    text_val = s.get("text", "")
-                else:
-                    self.start = float(getattr(s, "start", 0.0))
-                    self.end = float(getattr(s, "end", 0.0))
-                    text_val = getattr(s, "text", "")
-                
-                self.text = correct_vietnamese_transcription(text_val)
-                self.avg_logprob = -0.2   # Groq/large-v3 rất tự tin
-                self.no_speech_prob = 0.05
-                self.words = []
-
-        dummy_segs = []
-        for s in groq_segments:
-            text_val = s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "")
-            if text_val.strip():
-                dummy_segs.append(_DummySeg(s))
-
-        # Lấy mảng words để gán vào whisper_words phục vụ censor_audio_and_text
-        groq_words = getattr(result, "words", []) or []
-        if isinstance(groq_words, dict):
-             groq_words = groq_words.get("words", []) # Fallback just in case
-        elif not isinstance(groq_words, list) and isinstance(result, dict):
-             groq_words = result.get("words", [])
-        
-        class _DummyWord:
-            def __init__(self, w):
-                if isinstance(w, dict):
-                    self.start = float(w.get("start", 0.0))
-                    self.end = float(w.get("end", 0.0))
-                    self.word = correct_vietnamese_transcription(w.get("word", ""))
-                else:
-                    self.start = float(getattr(w, "start", 0.0))
-                    self.end = float(getattr(w, "end", 0.0))
-                    self.word = correct_vietnamese_transcription(getattr(w, "word", ""))
-                self.probability = 0.85
-
-        dummy_words = []
-        for w in groq_words:
-            dummy_words.append(_DummyWord(w))
-
-        # Gán words vào các segments tương ứng
-        for seg in dummy_segs:
-            seg.words = [w for w in dummy_words if w.start >= seg.start - 0.2 and w.end <= seg.end + 0.2]
-
-        if is_hallucination(transcript):
-            transcript = ""
-            dummy_words = []
-            dummy_segs = []
-            confidence = 0.0
-
-        if transcript:
-            logging.info(f"[GROQ] ✅ Transcript ({len(transcript)} ký tự, {len(dummy_segs)} segs, {len(dummy_words)} words): {transcript[:80]}")
-        return transcript, dummy_words, dummy_segs, confidence
-
-    except Exception as e:
-        import logging
-        logging.warning(f"[GROQ] Lỗi API: {e} — fallback sang Whisper local")
-        return "", [], [], 0.0
+        raise RuntimeError("ASR_MODE=cloud requires GROQ_API_KEY")
+    model_name = os.environ.get("GROQ_ASR_MODEL", "whisper-large-v3-turbo")
+    buf = io.BytesIO()
+    audio_segment.set_frame_rate(16000).set_channels(1).set_sample_width(2).export(buf, format="wav")
+    client = Groq(api_key=api_key, timeout=60)
+    result = client.audio.transcriptions.create(file=("audio.wav", buf.getvalue(), "audio/wav"),
+                model=model_name, language="vi", response_format="verbose_json",
+                timestamp_granularities=["word", "segment"], temperature=0)
+    segments = _field(result, "segments", []) or []
+    words = [{"start": _field(w, "start"), "end": _field(w, "end"), "word": _field(w, "word"),
+              "probability": None} for w in (_field(result, "words", []) or [])]
+    return _asr_result(segments, _field(result, "text", "") or "", "groq", model_name, words)
 
 
-def transcribe_auto(model, audio_segment: AudioSegment, vad_filter: bool = True) -> tuple[str, list, list, float]:
-    """Tự động chọn Groq API (nếu có key) hoặc Whisper local.
-    
-    Ưu tiên:
-      1. Groq API (Whisper large-v3-turbo) — chính xác nhất, không tốn RAM máy
-      2. Whisper small local — fallback khi không có internet / API key
-    """
-    import logging
+def transcribe_audio(model, audio_segment, vad_filter=True, speech_expected=False):
+    mode = os.environ.get("ASR_MODE", "local").lower()
+    if mode not in {"local", "cloud", "hybrid"}:
+        raise ValueError("ASR_MODE must be local, cloud or hybrid")
+    attempts = []
+    local = None
+    if mode != "cloud":
+        try:
+            local = transcribe_local(model, audio_segment, vad_filter, speech_expected=speech_expected)
+            attempts.append({"provider": "faster-whisper", "status": "success",
+                             "raw_transcript": local["raw_transcript"], "quality": local["quality"]})
+        except Exception as exc:
+            attempts.append({"provider": "faster-whisper", "status": "error", "error": str(exc)})
+        if mode == "local" or (local and local["quality"] == "usable") or (
+                local and not speech_expected and local["quality"] == "no_speech"):
+            if local:
+                local["attempts"] = attempts
+                if speech_expected and not local["has_speech"]:
+                    local["quality"] = "review"
+                    local["warnings"].append("Speech detected acoustically but ASR returned no usable speech")
+                return local
+    if mode == "cloud" or (mode == "hybrid" and os.environ.get("GROQ_API_KEY", "").strip()):
+        try:
+            cloud = transcribe_cloud(audio_segment)
+            cloud["attempts"] = attempts + [{"provider": "groq", "status": "success"}]
+            if cloud["has_speech"] or local is None:
+                return cloud
+            attempts.append({"provider": "groq", "status": "empty", "raw_transcript": cloud["raw_transcript"]})
+        except Exception as exc:
+            attempts.append({"provider": "groq", "status": "error", "error": str(exc)})
+    if local:
+        local["attempts"] = attempts
+        if speech_expected and not local["has_speech"]:
+            local["quality"] = "review"
+            local["warnings"].append("Speech detected acoustically but ASR returned no usable speech")
+        return local
+    result = _asr_result([], "", "groq" if mode == "cloud" else "faster-whisper",
+                         os.environ.get("GROQ_ASR_MODEL", "whisper-large-v3-turbo") if mode=="cloud" else os.environ.get("WHISPER_MODEL_SIZE", "medium"))
+    result.update(status="unavailable", quality="review", attempts=attempts,
+                  warnings=["Speech transcription could not be completed"])
+    return result
 
-    # Thử Groq trước
-    transcript, words, segs, conf = transcribe_vietnamese_groq(audio_segment)
-    if transcript:
-        logging.info(f"[TRANSCRIBE] Dùng Groq API ✅ conf={conf}%")
-        return transcript, words, segs, conf
 
-    # Fallback về Whisper local
-    api_key = os.environ.get("GROQ_API_KEY", "").strip()
-    if api_key:
-        logging.warning("[TRANSCRIBE] Groq không trả kết quả — dùng Whisper local làm dự phòng")
-    logging.info("[TRANSCRIBE] Dùng Whisper small local")
-    return transcribe_vietnamese(model, audio_segment, vad_filter=vad_filter)
+def _legacy_tuple(result):
+    from types import SimpleNamespace
+    segments = [SimpleNamespace(start=s["start"], end=s["end"], text=s["text"], words=[])
+                for s in result["segments"] if s["accepted"]]
+    words = [SimpleNamespace(**w) for w in result["words"]]
+    return result["normalized_transcript"], words, segments, None
+
+
+def transcribe_vietnamese(model, audio_segment, vad_filter=True):
+    return _legacy_tuple(transcribe_local(model, audio_segment, vad_filter))
+
+
+def transcribe_vietnamese_groq(audio_segment):
+    return _legacy_tuple(transcribe_cloud(audio_segment))
+
+
+def transcribe_auto(model, audio_segment, vad_filter=True):
+    return _legacy_tuple(transcribe_audio(model, audio_segment, vad_filter))
 
 
 def censor_audio_and_text(

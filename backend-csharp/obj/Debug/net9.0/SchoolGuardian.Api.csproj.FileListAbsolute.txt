@@ -444,10 +444,10 @@ C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\staticwebassets.build.json
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\staticwebassets.build.json.cache
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\staticwebassets.development.json
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\staticwebassets.build.endpoints.json
-C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\swae.build.ex.cache
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\SchoolGu.B05CD143.Up2Date
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\SchoolGuardian.Api.dll
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\refint\SchoolGuardian.Api.dll
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\SchoolGuardian.Api.pdb
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\SchoolGuardian.Api.genruntimeconfig.cache
 C:\NCKH-esp\backend-csharp\obj\Debug\net9.0\ref\SchoolGuardian.Api.dll
+C:\NCKH-esp\backend-csharp\bin\Debug\net9.0\audio-analysis-schema.sql

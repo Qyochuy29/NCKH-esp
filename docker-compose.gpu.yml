@@ -1,0 +1,18 @@
+# Optional GPU acceleration for Faster Whisper (TensorFlow/YAMNet stays on CPU).
+services:
+  ai-service:
+    image: safevoice-ai-gpu:local
+    build:
+      dockerfile: Dockerfile
+      args:
+        INSTALL_CUDA_LIBS: "1"
+    environment:
+      WHISPER_DEVICE: cuda
+      LD_LIBRARY_PATH: /usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

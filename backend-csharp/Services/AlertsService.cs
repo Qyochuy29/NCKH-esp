@@ -16,6 +16,7 @@ namespace SchoolGuardian.Api.Services
         private readonly IPushNotificationService _pushNotificationService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _aiServiceUrl;
+        private readonly string _audioDirectory;
 
         public AlertsService(ApplicationDbContext db, IHubContext<AlertHub> hub, ILogger<AlertsService> logger, IPushNotificationService pushNotificationService, IHttpClientFactory httpClientFactory, IConfiguration config)
         {
@@ -25,6 +26,7 @@ namespace SchoolGuardian.Api.Services
             _pushNotificationService = pushNotificationService;
             _httpClientFactory = httpClientFactory;
             _aiServiceUrl = config["AiService:Url"] ?? Environment.GetEnvironmentVariable("AI_SERVICE_URL") ?? "http://ai-service:5000";
+            _audioDirectory = config["Storage:AudioPath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
         }
 
         public async Task<object> FindAll(AlertQueryDto query, string? userRole, string? userId)
@@ -64,7 +66,10 @@ namespace SchoolGuardian.Api.Services
                 device = new { a.Device.Id, a.Device.Name, floor = a.Device.Floor, area = new { a.Device.Area.Id, a.Device.Area.Name } },
                 timestamp = DateTime.SpecifyKind(a.Timestamp, DateTimeKind.Utc),
                 sound_type = a.SoundType.ToString(),
-                confidence_score = a.ConfidenceScore,
+                confidence_score = a.RiskLevel == null ? (double?)a.ConfidenceScore : null,
+                risk_level = a.RiskLevel,
+                analysis = ReadAnalysisField(a.DialogData, "analysis"),
+                model_scores = ReadAnalysisField(a.DialogData, "sound_events"),
                 audio_file_url = canSeeAudio ? (a.AudioData != null ? $"/api/alerts/{a.Id}/audio" : a.AudioFileUrl) : null,
                 status = a.Status.ToString(),
                 handled_by = a.HandledBy == null ? null : new { a.HandledBy.Id, full_name = a.HandledBy.FullName },
@@ -104,7 +109,10 @@ namespace SchoolGuardian.Api.Services
                 device = new { a.Device.Id, a.Device.Name, floor = a.Device.Floor, area = new { a.Device.Area.Id, a.Device.Area.Name } },
                 timestamp = DateTime.SpecifyKind(a.Timestamp, DateTimeKind.Utc),
                 sound_type = a.SoundType.ToString(),
-                confidence_score = a.ConfidenceScore,
+                confidence_score = a.RiskLevel == null ? (double?)a.ConfidenceScore : null,
+                risk_level = a.RiskLevel,
+                analysis = ReadAnalysisField(a.DialogData, "analysis"),
+                model_scores = ReadAnalysisField(a.DialogData, "sound_events"),
                 audio_file_url = canSeeAudio ? (a.AudioData != null ? $"/api/alerts/{a.Id}/audio" : a.AudioFileUrl) : null,
                 status = a.Status.ToString(),
                 handled_by = a.HandledBy == null ? null : new { a.HandledBy.Id, full_name = a.HandledBy.FullName, role = a.HandledBy.Role.ToString() },
@@ -134,13 +142,15 @@ namespace SchoolGuardian.Api.Services
             byte[]? audioData = null,
             string? dialogData = null,
             string? transcript = null,
-            string? keywords = null)
+            string? keywords = null,
+            string? riskLevel = null)
         {
             var alert = new Alert
             {
                 DeviceId = deviceId,
                 SoundType = Enum.Parse<SoundType>(soundType),
                 ConfidenceScore = confidence,
+                RiskLevel = riskLevel,
                 AudioFileUrl = audioUrl,
                 AudioData = audioData,
                 DialogData = dialogData,
@@ -179,295 +189,97 @@ namespace SchoolGuardian.Api.Services
             return alertDto;
         }
 
-        public async Task<object> AnalyzeUploadedAudio(
-            string audioUrl,
-            string originalName = "",
-            string? preferredDeviceId = null,
-            string? edgeClass = null,
-            double? edgeConfidence = null)
+        private static object? ReadAnalysisField(string? json, string name)
         {
-            Device? device = null;
-
-            if (!string.IsNullOrWhiteSpace(preferredDeviceId))
-            {
-                device = await _db.Devices.FirstOrDefaultAsync(d =>
-                    d.Id == preferredDeviceId || d.Name == preferredDeviceId);
-            }
-
-            if (device == null)
-            {
-                var devices = await _db.Devices
-                    .Where(d => d.Status == DeviceStatus.online)
-                    .ToListAsync();
-                device = devices.Count > 0
-                    ? devices[Random.Shared.Next(devices.Count)]
-                    : await _db.Devices.FirstOrDefaultAsync();
-            }
-
-            if (device == null)
-                throw new Exception("No devices available to bind alert");
-
-            var createdAlerts = new List<object>();
-
+            if (string.IsNullOrEmpty(json)) return null;
             try
             {
-                var absolutePath = Path.GetFileName(audioUrl);
-                using var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromMinutes(5); // Chờ AI phân tích
-                var response = await client.PostAsJsonAsync($"{_aiServiceUrl.TrimEnd('/')}/analyze-full", new { filepath = absolutePath });
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadFromJsonAsync<JsonElement>();
-                    var dialogData = result.TryGetProperty("dialog_data", out var d) ? d.GetRawText() : null;
-                    if (!string.IsNullOrEmpty(dialogData))
-                    {
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(dialogData);
-                            var dict = new Dictionary<string, object?>();
-                            foreach (var prop in doc.RootElement.EnumerateObject())
-                            {
-                                dict[prop.Name] = JsonSerializer.Deserialize<object>(prop.Value.GetRawText());
-                            }
-                            dict["original_audio_url"] = audioUrl;
-                            dialogData = JsonSerializer.Serialize(dict);
-                        }
-                        catch {}
-                    }
-
-                    bool hasAlerts = false;
-                    if (result.TryGetProperty("alerts", out var alertsArr) && alertsArr.ValueKind == JsonValueKind.Array && alertsArr.GetArrayLength() > 0)
-                    {
-                        hasAlerts = true;
-                        foreach (var alertJson in alertsArr.EnumerateArray())
-                        {
-                            var soundType = alertJson.GetProperty("soundType").GetString() ?? "argument";
-                            var confidence = alertJson.GetProperty("confidence").GetDouble();
-                            var filename = alertJson.GetProperty("filename").GetString();
-                            var finalAudioUrl = $"/uploads/{filename}";
-                            var startTime = alertJson.TryGetProperty("start_time_seconds", out var st) ? st.GetDouble() : 0;
-                            var endTime = alertJson.TryGetProperty("end_time_seconds", out var et) ? et.GetDouble() : startTime + 10;
-                            var typeLabel = soundType switch {
-                                "dap_pha"  => AppConstants.SoundLabels.DapPha,
-                                "help"     => AppConstants.SoundLabels.Help,
-                                "threat"   => AppConstants.SoundLabels.Threat,
-                                "scream"   => AppConstants.SoundLabels.Scream,
-                                "argument" => AppConstants.SoundLabels.Argument,
-                                _          => AppConstants.SoundLabels.Unknown
-                            };
-                            var transcript = alertJson.TryGetProperty("transcript", out var t) ? t.GetString() : null;
-                            bool isThreat = alertJson.TryGetProperty("is_threat", out var it) && it.GetBoolean();
-                            bool isEmergency = alertJson.TryGetProperty("is_emergency", out var ie) && ie.GetBoolean();
-                            bool hasVulgarity = alertJson.TryGetProperty("has_vulgarity", out var iv) && iv.GetBoolean();
-
-                            // BẢO VỆ: Nếu là "argument" nhưng KHÔNG có chửi thề và KHÔNG có đe dọa -> bỏ qua (cuộc trò chuyện bình thường)
-                            if (soundType == "argument" && !hasVulgarity && !isThreat)
-                            {
-                                continue;
-                            }
-                            if (soundType == "unknown" || soundType == "normal")
-                            {
-                                continue;
-                            }
-
-                            bool isNoDialogue = string.IsNullOrWhiteSpace(transcript)
-                                || transcript.Trim().Equals("Không có lời thoại", StringComparison.OrdinalIgnoreCase)
-                                || transcript.Trim().Equals("khong co loi thoai", StringComparison.OrdinalIgnoreCase);
-
-                            string notes;
-                            if (isNoDialogue)
-                            {
-                                transcript = "Không có lời thoại";
-                                notes = $"[Giây {startTime:F1} - {endTime:F1}] {typeLabel}: Không có lời thoại.";
-                            }
-                            else
-                            {
-                                notes = $"[Giây {startTime:F1} - {endTime:F1}] {typeLabel}: \"{transcript}\"";
-                            }
-
-                            byte[]? audioBytes = null;
-                            var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", filename);
-                            if (File.Exists(fullPath))
-                            {
-                                audioBytes = await File.ReadAllBytesAsync(fullPath);
-                            }
-
-                            var alertRecord = await SubmitDetection(device.Id, soundType, confidence, finalAudioUrl, notes, audioBytes, dialogData, transcript);
-                            createdAlerts.Add(alertRecord);
-                        }
-                    }
-
-                    // KẾT HỢP CON AI THỨ 2 (EDGE AI TỪ ESP32 VỚI SERVER AI TRÊN WEB):
-                    if (!hasAlerts)
-                    {
-                        var normEdge = edgeClass?.Trim().ToUpperInvariant() ?? "";
-                        bool isEdgeDanger = normEdge == "KHOC" || normEdge == "HELP" || normEdge == "DAP_PHA" || normEdge == "CHUI_NHAU" || normEdge == "THREAT" || normEdge == "SCREAM";
-
-                        int violenceProb = 0;
-                        int threatsCount = 0;
-                        int vulgarityCount = 0;
-                        bool hasScream = false;
-                        bool hasCrying = false;
-                        bool hasImpactServer = false;
-                        int emergencyCount = 0;
-                        string? allTranscript = null;
-
-                        if (result.TryGetProperty("dialog_data", out var diagObj) && diagObj.ValueKind == JsonValueKind.Object)
-                        {
-                            if (diagObj.TryGetProperty("violence_probability", out var vp)) violenceProb = vp.GetInt32();
-                            if (diagObj.TryGetProperty("threats_count", out var tc)) threatsCount = tc.GetInt32();
-                            if (diagObj.TryGetProperty("vulgarity_count", out var vc)) vulgarityCount = vc.GetInt32();
-                            if (diagObj.TryGetProperty("has_scream", out var hs)) hasScream = hs.GetBoolean();
-                            if (diagObj.TryGetProperty("has_crying", out var hc)) hasCrying = hc.GetBoolean();
-                            if (diagObj.TryGetProperty("has_impact", out var hi)) hasImpactServer = hi.GetBoolean();
-                            if (diagObj.TryGetProperty("emergency_count", out var ec)) emergencyCount = ec.GetInt32();
-
-                            if (diagObj.TryGetProperty("dialogue", out var diagArr) && diagArr.ValueKind == JsonValueKind.Array)
-                            {
-                                var texts = new List<string>();
-                                foreach (var item in diagArr.EnumerateArray())
-                                {
-                                    if (item.TryGetProperty("text", out var tx))
-                                    {
-                                        var s = tx.GetString();
-                                        if (!string.IsNullOrWhiteSpace(s)) texts.Add(s);
-                                    }
-                                }
-                                if (texts.Any()) allTranscript = string.Join(" ", texts);
-                            }
-                        }
-
-                        // NGUYÊN TẮC THẨM ĐỊNH NỘI DUNG TỐI CAO:
-                        // 1. Server AI phát hiện dấu hiệu nguy hiểm qua lời thoại bóc băng hoặc âm thanh YAMNet:
-                        bool serverDetectedDanger = hasScream 
-                            || hasCrying 
-                            || emergencyCount > 0 
-                            || threatsCount > 0 
-                            || vulgarityCount > 0 
-                            || hasImpactServer 
-                            || violenceProb >= 40;
-
-                        // 2. Nếu Server AI thẩm định nội dung và xác nhận an toàn (0% bạo lực, không chửi thề, không đe dọa):
-                        // -> Phủ quyết (VETO) các báo động giả do tiếng trống nhạc hoặc tiếng ồn gây kích hoạt nhầm tại Edge!
-                        bool serverConfirmsSafe = !hasScream 
-                            && !hasCrying 
-                            && emergencyCount == 0 
-                            && threatsCount == 0 
-                            && vulgarityCount == 0 
-                            && !hasImpactServer 
-                            && violenceProb < 30;
-
-                        bool isRealViolence = serverDetectedDanger;
-
-                        // Chỉ chấp nhận hỗ trợ từ Edge AI nếu Server AI không xác nhận an toàn tuyệt đối:
-                        if (!isRealViolence && isEdgeDanger && !serverConfirmsSafe)
-                        {
-                            if (normEdge == "DAP_PHA" && (hasImpactServer || violenceProb >= 25))
-                            {
-                                isRealViolence = true;
-                            }
-                            else if ((normEdge == "KHOC" || normEdge == "HELP") && (hasCrying || emergencyCount > 0 || violenceProb >= 25))
-                            {
-                                isRealViolence = true;
-                            }
-                            else if ((normEdge == "CHUI_NHAU" || normEdge == "THREAT") && (vulgarityCount > 0 || threatsCount > 0 || violenceProb >= 25))
-                            {
-                                isRealViolence = true;
-                            }
-                        }
-
-                        if (isRealViolence)
-                        {
-                            var detectedTypes = new List<string>();
-
-                            // Kiểm tra tất cả các dấu hiệu bạo lực thay vì chỉ lấy cái đầu tiên
-                            if (hasCrying || emergencyCount > 0 || normEdge == "KHOC" || normEdge == "HELP") 
-                                detectedTypes.Add("help");
-                            
-                            if (hasScream || normEdge == "SCREAM") 
-                                detectedTypes.Add("scream");
-                                
-                            if (threatsCount > 0 || normEdge == "THREAT") 
-                                detectedTypes.Add("threat");
-                                
-                            if (hasImpactServer || normEdge == "DAP_PHA") 
-                                detectedTypes.Add("dap_pha");
-                                
-                            if (vulgarityCount > 0 || normEdge == "CHUI_NHAU") 
-                                detectedTypes.Add("argument");
-                                
-                            if (detectedTypes.Count == 0)
-                            {
-                                detectedTypes.Add("argument");
-                            }
-
-                            double finalConfidence = violenceProb > 0 
-                                ? (double)violenceProb 
-                                : (edgeConfidence.HasValue && edgeConfidence.Value > 0 
-                                    ? (edgeConfidence.Value <= 1.0 ? edgeConfidence.Value * 100.0 : edgeConfidence.Value) 
-                                    : 80.0);
-
-                            byte[]? audioBytes = null;
-                            var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", absolutePath);
-                            if (File.Exists(fullPath))
-                            {
-                                audioBytes = await File.ReadAllBytesAsync(fullPath);
-                            }
-
-                            bool isNoDialogueFallback = string.IsNullOrWhiteSpace(allTranscript)
-                                || allTranscript.Trim().Equals("Không có lời thoại", StringComparison.OrdinalIgnoreCase)
-                                || allTranscript.Trim().Equals("khong co loi thoai", StringComparison.OrdinalIgnoreCase);
-
-                            string edgeInfo = !string.IsNullOrEmpty(normEdge) ? $"Edge AI: {normEdge} | " : "";
-
-                            // Tạo một cảnh báo riêng cho mỗi loại bạo lực phát hiện được
-                            foreach (var soundType in detectedTypes)
-                            {
-                                var typeLabel = soundType switch {
-                                    "dap_pha"  => AppConstants.SoundLabels.DapPha,
-                                    "help"     => AppConstants.SoundLabels.Help,
-                                    "threat"   => AppConstants.SoundLabels.Threat,
-                                    "scream"   => AppConstants.SoundLabels.Scream,
-                                    "argument" => AppConstants.SoundLabels.Argument,
-                                    _          => AppConstants.SoundLabels.Unknown
-                                };
-
-                                string notes;
-                                if (isNoDialogueFallback)
-                                {
-                                    notes = $"[{edgeInfo}{typeLabel}] Không có lời thoại.";
-                                }
-                                else
-                                {
-                                    notes = $"[{edgeInfo}{typeLabel}] Lời thoại: \"{allTranscript}\"";
-                                }
-
-                                string alertTranscript = isNoDialogueFallback ? "Không có lời thoại" : allTranscript;
-
-                                var alertRecord = await SubmitDetection(device.Id, soundType, finalConfidence, audioUrl, notes, audioBytes, dialogData, alertTranscript);
-                                createdAlerts.Add(alertRecord);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogInformation("[Lọc ồn / Nói chuyện bình thường] File {File} không chứa từ ngữ nguy hiểm, tiếng hét hay tiếng khóc (ViolenceProb: {Vp}%, Scream: {Hs}, Cry: {Hc}, Curses: {Vc}, Threats: {Tc}). Bỏ qua không tạo cảnh báo lên Web.", absolutePath, violenceProb, hasScream, hasCrying, vulgarityCount, threatsCount);
-                        }
-                    }
-                }
-                else
-                {
-                    var errText = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning("AI Service trả về lỗi: {Code}. Detail: {Err}", response.StatusCode, errText);
-                    throw new Exception($"AI Server Error ({response.StatusCode}): {errText}");
-                }
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.TryGetProperty(name, out var value) ? value.Clone() : null;
             }
-            catch (Exception e)
+            catch (JsonException) { return null; }
+        }
+
+        private async Task<IQueryable<AudioAnalysis>> VisibleAnalyses(string? role, string? userId)
+        {
+            var query = _db.AudioAnalyses.AsNoTracking().AsQueryable();
+            if (role == AppConstants.Roles.PhuHuynh)
             {
-                _logger.LogError("Failed to reach AI service: {Msg}", e.Message);
-                throw new Exception($"Không thể phân tích âm thanh: {e.Message}");
+                var areas = await _db.Students.Where(s => s.ParentId == userId).Select(s => s.ClassroomId).ToListAsync();
+                query = query.Where(a => _db.Devices.Any(d => d.Id == a.DeviceId && areas.Contains(d.AreaId)));
             }
+            return query;
+        }
 
-            return new { success = true, totalAlerts = createdAlerts.Count, alerts = createdAlerts };
+        public async Task<object> FindAnalyses(string? role, string? userId, int offset, int limit)
+        {
+            var query = await VisibleAnalyses(role, userId);
+            var total = await query.CountAsync();
+            offset = Math.Max(0, offset);
+            limit = Math.Clamp(limit, 1, 100);
+            var rows = await query.OrderByDescending(a => a.CreatedAt).Skip(offset).Take(limit).ToListAsync();
+            var data = rows.Select(a => new { a.Id, created_at = a.CreatedAt, device_id = a.DeviceId,
+                audio_file_url = a.AudioFileUrl, original_name = ReadAnalysisField(a.ResultJson, "original_name"),
+                analysis = ReadAnalysisField(a.ResultJson, "analysis") });
+            return new { data, total, offset, limit };
+        }
+
+        public async Task<object> FindAnalysis(string id, string? role, string? userId)
+        {
+            var query = await VisibleAnalyses(role, userId);
+            var row = await query.FirstOrDefaultAsync(a => a.Id == id)
+                ?? throw new KeyNotFoundException("Không tìm thấy bản phân tích audio");
+            return JsonSerializer.Deserialize<JsonElement>(row.ResultJson);
+        }
+
+        public async Task<object> AnalyzeUploadedAudio(
+            string audioUrl, string originalName = "", string? preferredDeviceId = null,
+            string? edgeClass = null, double? edgeConfidence = null)
+        {
+            var device = string.IsNullOrWhiteSpace(preferredDeviceId) ? null :
+                await _db.Devices.FirstOrDefaultAsync(d => d.Id == preferredDeviceId || d.Name == preferredDeviceId);
+            device ??= await _db.Devices.OrderBy(d => d.Id).FirstOrDefaultAsync();
+            if (device == null) throw new InvalidOperationException("No device available to bind analysis");
+            var filename = Path.GetFileName(audioUrl);
+            using var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromMinutes(15);
+            using var response = await client.PostAsJsonAsync(
+                $"{_aiServiceUrl.TrimEnd('/')}/analyze-full", new { filepath = filename });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+            if (!result.TryGetProperty("analysis", out var analysis) || !result.TryGetProperty("asr", out var asr))
+                throw new HttpRequestException("AI response is missing analysis/transcription");
+            var risk = analysis.GetProperty("risk_level").GetString();
+            if (risk is not ("low" or "review" or "high"))
+                throw new HttpRequestException("AI response has invalid risk_level");
+            var persisted = new Dictionary<string, object?>();
+            foreach (var property in result.EnumerateObject())
+                persisted[property.Name] = property.Value.Clone();
+            persisted["original_audio_url"] = audioUrl;
+            persisted["original_name"] = Path.GetFileName(originalName);
+            // Edge scores are audit metadata only; they never override server risk.
+            persisted["edge_evidence"] = new { label = edgeClass, model_score = edgeConfidence };
+            var json = JsonSerializer.Serialize(persisted);
+            var run = new AudioAnalysis { DeviceId = device.Id, AudioFileUrl = audioUrl, ResultJson = json };
+            _db.AudioAnalyses.Add(run);
+            await _db.SaveChangesAsync();
+            var alerts = new List<object>();
+            var transcript = asr.GetProperty("normalized_transcript").GetString() ?? "";
+            if (risk != "low")
+            {
+                var type = result.TryGetProperty("soundType", out var st) ? st.GetString() : "argument";
+                if (!Enum.TryParse<SoundType>(type, out _)) type = "argument";
+                var path = Path.Combine(_audioDirectory, filename);
+                var bytes = File.Exists(path) ? await File.ReadAllBytesAsync(path) : null;
+                alerts.Add(await SubmitDetection(device.Id, type!, 0, audioUrl,
+                    analysis.GetProperty("summary").GetString(), bytes, json, transcript, riskLevel: risk));
+            }
+            return new { success = true, total_alerts = alerts.Count,
+                analysis_id = run.Id, alerts, result = persisted,
+                asr = asr.Clone(), timeline = result.GetProperty("timeline").Clone(),
+                sound_events = result.GetProperty("sound_events").Clone(), analysis = analysis.Clone(),
+                raw_transcript = asr.GetProperty("raw_transcript").GetString(),
+                normalized_transcript = transcript, transcript };
         }
 
         public async Task<object> AnalyzeDialogAudio(string audioUrl)

@@ -137,7 +137,7 @@ app.UseAuthorization();
 // Serve uploaded audio files statically (replace NestJS ServeStatic)
 app.UseStaticFiles();
 
-var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+var uploadsPath = builder.Configuration["Storage:AudioPath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
 if (!Directory.Exists(uploadsPath)) Directory.CreateDirectory(uploadsPath);
 
 var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
@@ -152,7 +152,7 @@ app.UseStaticFiles(new StaticFileOptions
     ServeUnknownFileTypes = true
 });
 
-var tailieuPath = @"C:\NKKH\tai-lieu";
+var tailieuPath = builder.Configuration["Storage:AudioPath"] ?? uploadsPath;
 if (!Directory.Exists(tailieuPath)) Directory.CreateDirectory(tailieuPath);
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -161,7 +161,8 @@ app.UseStaticFiles(new StaticFileOptions
     ContentTypeProvider = provider,
     ServeUnknownFileTypes = true
 });
-var frontendPath = Path.Combine(Directory.GetCurrentDirectory(), "frontend");
+var frontendPath = builder.Configuration["Frontend:Path"]
+    ?? Path.Combine(Directory.GetCurrentDirectory(), "frontend");
 if (!Directory.Exists(frontendPath))
 {
     frontendPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "frontend");
@@ -177,6 +178,10 @@ if (Directory.Exists(frontendPath))
 }
 
 app.MapControllers();
+app.MapGet("/health", async (ApplicationDbContext db) =>
+    await db.Database.CanConnectAsync()
+        ? Results.Ok(new { status = "healthy" })
+        : Results.StatusCode(503));
 app.MapGet("/", () => Results.Redirect("/dang-nhap.html"));
 
 // SignalR Hub - Frontend kết nối tới /ws/alerts
@@ -188,6 +193,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.EnsureCreated();
+    db.Database.ExecuteSqlRaw(File.ReadAllText(
+        Path.Combine(AppContext.BaseDirectory, "audio-analysis-schema.sql")));
 
     if (!db.Users.Any())
     {

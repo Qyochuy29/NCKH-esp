@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cảnh báo trực tiếp — SafeVoice AI</title>
   <meta name="description" content="Theo dõi cảnh báo bạo lực học đường realtime">
-  <link rel="stylesheet" href="./giao-dien.css">
+  <link rel="stylesheet" href="./giao-dien.css?v=ai-chat-1">
 </head>
 <body>
   <div class="app-layout">
@@ -56,22 +56,22 @@
   <div id="ai-loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center; color:white;">
     <div class="spinner" style="border: 4px solid #333; border-top: 4px solid #3498db; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite;"></div>
     <h3 style="margin-top: 24px; font-size: 1.3rem;">🤖 AI đang rà soát file âm thanh...</h3>
-    <p style="color: rgba(255,255,255,0.7); margin-top: 8px;">Quá trình này có thể tốn 20-40 giây. Vui lòng đợi.</p>
+    <p style="color: rgba(255,255,255,0.7); margin-top: 8px;">Đang chép lời nói và ghép các bằng chứng theo thời gian. Thời gian phụ thuộc độ dài file và model.</p>
     <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
   </div>
 
   <!-- Dialog Modal -->
   <div id="dialog-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; align-items:center; justify-content:center; padding: 20px;">
-    <div style="background:white; border-radius:12px; width:100%; max-width:600px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+    <div style="background:var(--bg-card); color:var(--text); border-radius:16px; width:100%; max-width:760px; max-height:90vh; display:flex; flex-direction:column; box-shadow:var(--shadow-xl);">
       <div style="padding:16px 20px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0; font-size:18px; font-weight:700; color:#111827;">Chi tiết AI phân tích</h3>
+        <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Hội thoại &amp; phân tích AI</h3>
         <button onclick="document.getElementById('dialog-modal').style.display='none'" style="background:none; border:none; font-size:24px; cursor:pointer; color:#6b7280; padding:0; line-height:1;">&times;</button>
       </div>
       <div id="dialog-modal-body" style="padding:20px; overflow-y:auto; flex:1;"></div>
     </div>
   </div>
 
-  <script src="./dung-chung.js?v=7"></script>
-  <script src="./canh-bao.js?v=7"></script>
+  <script src="./dung-chung.js?v=ai-chat-1"></script>
+  <script src="./canh-bao.js?v=8"></script>
 </body>
 </html>

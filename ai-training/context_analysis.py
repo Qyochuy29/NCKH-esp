@@ -77,7 +77,7 @@ def speech_units(segments, words):
             matching=[w for a,b,w in aligned if a<m.end() and b>m.start()]
             if matching and len(' '.join(w['word'].strip() for w in matching)) >= .8*len(m.group().strip()):
                 unit.update(start=matching[0]['start'],end=matching[-1]['end'],timestamp_scope='words')
-            unit['reported_scope']=any(a<m.end() and b>m.start() for a,b in quotes)
+            unit['reported_scope']=seg.get('reported_scope',False) or any(a<m.end() and b>m.start() for a,b in quotes)
             units.append(unit)
     return units
 

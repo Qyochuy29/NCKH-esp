@@ -16,7 +16,7 @@ RUN if [ "$INSTALL_CUDA_LIBS" = "1" ]; then \
     fi
 
 # Copy toàn bộ mã nguồn
-COPY server.py transcription.py asr_runtime.py windows_cuda.py analysis_pipeline.py audio_events.py context_analysis.py yamnet_class_map.csv ./
+COPY server.py transcription.py asr_runtime.py windows_cuda.py analysis_pipeline.py chunk_analysis.py audio_events.py context_analysis.py yamnet_class_map.csv ./
 
 # Set biến môi trường
 ENV PYTHONUNBUFFERED=1

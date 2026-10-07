@@ -9,6 +9,7 @@ from pydub import AudioSegment
 from transcription import transcribe_audio, censor_audio_and_text
 from audio_events import detect_audio_events
 from context_analysis import analyze_context, speech_signals
+from chunk_analysis import analyze_chunks,aggregate_chunk_results
 
 
 def build_timeline(segments, events):
@@ -74,13 +75,17 @@ def analyze_file(filepath, upload_dir, whisper_model, yamnet_model):
             'start_time':seg['start'],'end_time':seg['end'],'timestamp_s':seg['start'],
             'is_threat':flags['threat'],'is_emergency':flags['help'] or flags['victim'],
             'has_vulgarity':flags['profanity']})
-    result={'status':'success','schema_version':'2.0',
+    chunks=analyze_chunks(audio,upload_dir,original_hash,whisper_model,yamnet_model,asr,sounds)
+    whole_analysis=analysis
+    analysis=aggregate_chunk_results(analysis,chunks)
+    result={'status':'success','schema_version':'2.1','chunk_seconds':10,'chunks':chunks,
         'processing':{'audio_events_seconds':round(event_seconds,3),'asr_seconds':round(asr_seconds,3),
                       'total_seconds':round(time.monotonic()-started,3)},
         'audio':{'duration_seconds':len(audio)/1000,'original_audio_url':original_url,
                  'original_sha256':original_hash,'processed_audio_url':processed_url},
         'asr':asr,'sound_events':sounds['scores'],'audio_events':sounds,
         'timeline':timeline,'analysis':analysis,'school_violence_analysis':analysis,
+        'whole_file_analysis':whole_analysis,
         'model_versions':{'asr':asr['model'],'audio_events':'yamnet/1','reasoning':analysis.get('reasoning_provider','unknown')},
         'transcript':asr['normalized_transcript'],'raw_transcript':asr['raw_transcript'],
         'normalized_transcript':asr['normalized_transcript'], 'segments':asr['segments'],

@@ -88,3 +88,24 @@ Nếu CUDA lỗi, model giữ nguyên tên và fallback CPU; không tự gửi a
 - Chưa có speaker diarization thật; không gán người nói giả.
 - Không thể xác minh địa điểm trường học, danh tính học sinh hay sự việc diễn kịch chỉ từ pipeline này.
 - Chưa có benchmark độc lập để tuyên bố một tỷ lệ chính xác. REVIEW/HIGH vẫn cần kiểm tra bằng audio gốc.
+# Phân tích theo đoạn 10 giây
+
+Audio dài hơn 10 giây được tạo thêm các bản WAV mono 16 kHz tại
+`backend-csharp/uploads/processed/chunks/<SHA256>/part_001.wav`.
+File 30 giây có 3 đoạn; file 25 giây có 10 + 10 + 5 giây. Không ghi đè file gốc.
+Mỗi đoạn chạy riêng Faster-Whisper, YAMNet và bộ phân tích ngữ cảnh, trả transcript,
+nhãn, mức LOW/REVIEW/HIGH và đường dẫn nghe/tải xuống. Nhãn âm thanh không xác nhận
+bạo lực học đường; kết quả cần được đối chiếu với bằng chứng và con người xem lại.
+
+`/analyze-full` bổ sung `chunks`, `chunk_seconds`, `whole_file_analysis`.
+`chunks[].start/end` là thời gian trong file gốc; timestamp trong ASR và timeline
+của đoạn tính từ đầu đoạn (`timestamp_reference: chunk_start`). `boundary_context`
+giữ bằng chứng toàn file trong vùng lân cận 3 giây để tránh mất quan hệ ở chỗ cắt.
+Kết luận tổng hợp không hạ mức nguy cơ khi một đoạn có mức cao hơn toàn file.
+Website hiển thị tối đa 6 đoạn trước, các đoạn còn lại có thể mở rộng.
+
+Việc phân tích toàn file và từng đoạn làm tăng thời gian xử lý. Lịch sử đã lưu
+trước thay đổi không tự sinh đoạn mới; upload mới sẽ có phần đánh giá từng đoạn.
+Kiểm tra: 48 unit tests đạt; clip thực tế 25,517 giây tạo 3 đoạn trên CUDA,
+các URL WAV trả HTTP 200, SHA256 file gốc không đổi. Chrome kiểm tra 3 thẻ đoạn,
+4 trình phát âm thanh và giao diện desktop/mobile không tràn ngang hay lỗi JavaScript.

@@ -532,6 +532,18 @@ function renderAnalysisReport(result) {
   const acoustic=events.filter(e=>['scream','crying','impact','loud_speech'].includes(e.type));
   const conversation=[...messages,...acoustic].sort((a,b)=>a.start-b.start);
   const timeButton=(start,end)=>`<button type="button" class="ai-chat-time" data-ai-seek="${Math.max(0,Number(start)||0)}" ${safeUrl ? '' : 'disabled'} title="Nghe từ thời điểm này"><i class="bi bi-play-circle" aria-hidden="true"></i> ${analysisTime(start)}${end!=null ? '–'+analysisTime(end) : ''}</button>`;
+  const chunkNames={profanity:'Chửi tục',verbal_abuse:'Xúc phạm',threat:'Đe dọa',help:'Kêu cứu',possible_physical_violence:'Nghi xung đột thể chất',scream:'Tiếng hét',crying:'Tiếng khóc',impact:'Va đập',loud_speech:'Nói lớn'};
+  const chunkCards=(result.chunks||[]).map(c=>{
+    const chunkUrl=typeof c.audio_url==='string' && /^\/uploads\/processed\/chunks\//.test(c.audio_url) && !c.audio_url.includes('..') ? c.audio_url : null;
+    const rank={low:0,review:1,high:2};
+    const boundaryHigher=(rank[c.boundary_context?.risk_level]??-1)>(rank[c.analysis?.risk_level]??-1);
+    const risk=boundaryHigher ? c.boundary_context.risk_level : c.analysis?.risk_level;
+    return `<article class="ai-chunk-card"><div class="ai-chat-meta"><strong>Đoạn cắt ${Number(c.index)}</strong>${timeButton(c.start,c.end)}<strong class="ai-chat-risk ai-chat-risk-${['low','review','high'].includes(risk)?risk:'review'}">${riskLabel(risk)}</strong></div>
+      <div class="ai-chat-tags">${(c.labels||[]).map(l=>`<span>${escapeHTML(chunkNames[l]||l)}</span>`).join('') || `<span>${boundaryHigher ? 'Dấu hiệu từ ngữ cảnh liền kề' : 'Chưa có nhãn đáng ngờ'}</span>`}</div>
+      <p>${escapeHTML(c.analysis?.summary||'')}</p>
+      ${boundaryHigher ? `<p class="ai-chat-notice">Có bằng chứng liên quan ở sát ranh giới đoạn: ${escapeHTML(c.boundary_context.summary)}</p>` : ''}
+      ${chunkUrl ? `<audio controls preload="none" src="${escapeHTML(chunkUrl)}" aria-label="Nghe đoạn cắt ${Number(c.index)}"></audio><a href="${escapeHTML(chunkUrl)}" download>Tải WAV đoạn này</a>` : ''}</article>`;
+  });
   const rows=conversation.map(s=>{
     if(s.type!=='speech') return `<div class="ai-chat-event">${timeButton(s.start)}<span><i class="bi bi-soundwave" aria-hidden="true"></i> ${escapeHTML(names[s.type]||s.type)}${s.strength==='tentative' ? ' · tín hiệu yếu' : ''}</span></div>`;
     const flags=s.accepted===false ? [] : [...new Set(evidence.filter(e=>e.kind==='speech' && s.text.includes(e.text || '\u0000') && e.start<=s.end && e.end>=s.start).map(e=>signalNames[e.signal]).filter(Boolean))];
@@ -548,6 +560,7 @@ function renderAnalysisReport(result) {
     ${typeof analysis.has_profanity==='boolean' ? `<div class="ai-chat-findings"><span>Chửi tục: <strong>${analysis.has_profanity ? 'Có' : uncertain ? 'Chưa xác định' : 'Chưa nhận diện'}</strong></span><span>Xúc phạm: <strong>${analysis.has_insults ? 'Có' : uncertain ? 'Chưa xác định' : 'Chưa nhận diện'}</strong></span></div>` : ''}</div>
     ${analysis.analysis_version!=='rules-3.0' ? '<p class="ai-chat-notice">Bản phân tích cũ, chưa được cập nhật bằng bản AI mới.</p>' : ''}
     ${safeUrl ? `<div class="ai-chat-player"><span><i class="bi bi-headphones" aria-hidden="true"></i> Nghe bản ghi gốc</span><audio controls preload="metadata" src="${escapeHTML(safeUrl)}"></audio></div>` : ''}
+    ${chunkCards.length ? `<div class="ai-chat-heading"><h4>Đánh giá từng đoạn 10 giây</h4><span>${chunkCards.length} đoạn cắt</span></div><div class="ai-chunk-list">${chunkCards.slice(0,6).join('')}</div>${chunkCards.length>6 ? `<details class="ai-chat-technical"><summary>Xem ${chunkCards.length-6} đoạn còn lại</summary>${chunkCards.slice(6).join('')}</details>` : ''}` : ''}
     <div class="ai-chat-heading"><h4>Nội dung hội thoại</h4><span>${segments.length} đoạn lời nói</span></div>
     <p class="ai-chat-hint">${safeUrl ? 'Bấm thời gian để nghe lại. ' : ''}Các đoạn được sắp theo thời gian; chưa phân biệt người nói.</p>
     ${uncertain ? '<p class="ai-chat-notice">Lời nói chưa được nhận dạng đầy đủ hoặc cần xác minh.</p>' : ''}
